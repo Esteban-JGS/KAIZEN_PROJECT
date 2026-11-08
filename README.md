@@ -481,8 +481,8 @@ Expected behavior, the UI stack is WinForms-based.
 - Professor: Josias Ariel Chaves Murillo
 - Term: II 2025
 - Students:
+  - Esteban Javier Granados Sibaja 
   - Juan Carlos Camacho Solano
-  - Esteban Granados Sibaja
 
 ---
 
