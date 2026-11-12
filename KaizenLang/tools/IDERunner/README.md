@@ -8,7 +8,7 @@ Usage:
 
 - Example:
 
-  dotnet run --project tools/IDERunner/IDERunner.csproj -- tools/QuickRunner/sample.txt
+  dotnet run --project tools/IDERunner/IDERunner.csproj -- examples/test-01-variables-basicas.txt
 
 - To include debug lines (logger [DBG] output) in the program output, pass --verbose:
 

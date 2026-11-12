@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Threading.Tasks;
-using ParadigmasLang;
+using KaizenLang.Core;
 
 namespace KaizenLang.UI.Services;
 
@@ -10,6 +10,9 @@ public class ExecutionService
     private readonly CompilationService compilationService;
     private readonly Stopwatch executionTimer;
     public Func<string?, string?>? InputProvider { get; set; }
+
+    // Tiempo máximo de ejecución del programa, sin contar la espera de input().
+    public static readonly TimeSpan ExecutionTimeLimit = TimeSpan.FromSeconds(5);
 
     public ExecutionService()
     {
@@ -50,14 +53,40 @@ public class ExecutionService
             executionTimer.Restart();
             outputBuilder.AppendLine("Running program...");
 
-            var interpreter = new Interpreter(InputProvider)
+            // El límite de tiempo no debe incluir lo que el usuario tarda en responder a input():
+            // se mide la espera en el diálogo y se descuenta del tiempo de ejecución.
+            var inputWait = new Stopwatch();
+            Func<string?, string?>? provider = null;
+            if (InputProvider != null)
+            {
+                var userProvider = InputProvider;
+                provider = prompt =>
+                {
+                    inputWait.Start();
+                    try
+                    {
+                        return userProvider(prompt);
+                    }
+                    finally
+                    {
+                        inputWait.Stop();
+                    }
+                };
+            }
+
+            var interpreter = new Interpreter(provider)
             {
                 VerboseMode = false
             };
 
             List<string>? executionOutput = null;
             var execTask = Task.Run(() => interpreter.Execute(compilationResult.AST));
-            var completed = execTask.Wait(TimeSpan.FromSeconds(5));
+            bool completed;
+            while (!(completed = execTask.Wait(TimeSpan.FromMilliseconds(50))))
+            {
+                if (executionTimer.Elapsed - inputWait.Elapsed > ExecutionTimeLimit)
+                    break;
+            }
             if (!completed)
             {
                 executionTimer.Stop();

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace ParadigmasLang;
+namespace KaizenLang.Core;
 
 internal class Tokenizer
 {
@@ -174,8 +174,11 @@ internal class Tokenizer
                 continue;
             }
 
+            // La posición se toma antes de leer; después de Read() apunta al carácter siguiente.
+            var invalidLine = stream.Line;
+            var invalidColumn = stream.Column;
             var invalidChar = stream.Read();
-            tokens.Add(new Token("INVALID", $"Carácter no reconocido '{invalidChar}'", stream.Line, stream.Column));
+            tokens.Add(new Token("INVALID", $"Carácter no reconocido '{invalidChar}'", invalidLine, invalidColumn));
         }
 
         return tokens;

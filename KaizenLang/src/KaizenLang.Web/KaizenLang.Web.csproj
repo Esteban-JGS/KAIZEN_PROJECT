@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <!-- Playground web: corre KaizenLang.Core (compilador e intérprete) en el navegador con WebAssembly. -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- El lenguaje formatea con InvariantCulture; sin datos de globalización la descarga es más liviana. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <BlazorEnableTimeZoneSupport>false</BlazorEnableTimeZoneSupport>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="9.0.23" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="9.0.23" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KaizenLang.Core\KaizenLang.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Los ejemplos del repositorio se embeben tal cual, así el playground no queda desactualizado. -->
+    <EmbeddedResource Include="..\..\examples\test-*.txt" LogicalName="examples/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\examples\inputs\*.txt" LogicalName="inputs/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

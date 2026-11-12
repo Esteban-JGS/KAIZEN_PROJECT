@@ -1,4 +1,4 @@
-namespace ParadigmasLang;
+namespace KaizenLang.Core;
 
 public static class LiteralWords
 {

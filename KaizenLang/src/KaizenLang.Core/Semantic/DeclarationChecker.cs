@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace ParadigmasLang;
+namespace KaizenLang.Core;
 
 public class DeclarationChecker
 {
@@ -15,7 +15,7 @@ public class DeclarationChecker
 
     public DeclarationChecker(Stack<SymbolTable> scopes,
                               IDictionary<string, FunctionSignature> functions,
-                              Dictionary<string,int> builtins,
+                              Dictionary<string, int> builtins,
                               TypeResolver typeResolver,
                               Diagnostics diagnostics,
                               Action<Node> visitNodeCallback)
@@ -33,34 +33,34 @@ public class DeclarationChecker
         var nameNode = node.FindChild("Identifier") ?? node.FindChild("IDENTIFIER");
         if (nameNode == null)
         {
-            diagnostics.Report(node, "Variable declaration missing identifier");
+            diagnostics.Report(node, "Declaración de variable sin nombre");
             return;
         }
 
         var varName = SemanticUtils.ExtractIdentifierName(nameNode);
         if (string.IsNullOrEmpty(varName))
         {
-            diagnostics.Report(node, "Variable declaration has empty name");
+            diagnostics.Report(node, "Declaración de variable sin nombre");
             return;
         }
 
         var current = scopes.Peek();
         if (!current.DeclareVariable(varName, string.Empty, nameNode.Line))
         {
-            diagnostics.Report(node, $"Variable '{varName}' already declared in this scope");
+            diagnostics.Report(node, $"Variable '{varName}' ya declarada en este alcance");
             return;
         }
 
         if (node.Children == null || node.Children.Count == 0)
         {
-            diagnostics.Report(node, "Variable declaration missing type");
+            diagnostics.Report(node, "Declaración de variable sin tipo");
             return;
         }
 
         var typeNode = node.Children[0];
         if (typeNode == null)
         {
-            diagnostics.Report(node, "Variable declaration has malformed type node");
+            diagnostics.Report(node, "Declaración de variable con tipo mal formado");
             return;
         }
 
@@ -116,7 +116,13 @@ public class DeclarationChecker
             }
 
             if (!initializerHasErrors)
+            {
                 ValidateIdentifiersInExpression(initExpr);
+                // Recorre el inicializador con el visitante general para validar también la aridad de
+                // las llamadas: antes "gear x = suma(10);" pasaba sin error si suma esperaba 2 argumentos.
+                if (initExpr != null)
+                    visitNodeCallback(initExpr);
+            }
 
             var initType = initializerHasErrors ? null : typeResolver.Resolve(initExpr);
             if (initType != null)
@@ -203,7 +209,7 @@ public class DeclarationChecker
         var fnName = SemanticUtils.ExtractIdentifierName(nameNode);
         if (string.IsNullOrEmpty(fnName))
         {
-            diagnostics.Report(node, "Function declaration missing name");
+            diagnostics.Report(node, "Declaración de función sin nombre");
             return;
         }
 
@@ -214,11 +220,13 @@ public class DeclarationChecker
 
         if (functions.ContainsKey(fnName))
         {
-            diagnostics.Report(node, $"Function '{fnName}' already declared");
+            diagnostics.Report(node, $"Función '{fnName}' ya declarada");
             return;
         }
 
-        functions[fnName] = new FunctionSignature { Name = fnName, Arity = arity, IsBuiltin = false };
+        // El tipo de retorno se registra antes de recorrer el cuerpo para que las llamadas recursivas tengan tipo.
+        var returnType = node.Children.Count > 0 ? node.Children[0].Type : string.Empty;
+        functions[fnName] = new FunctionSignature { Name = fnName, Arity = arity, IsBuiltin = false, ReturnType = returnType };
 
         scopes.Push(new SymbolTable());
         if (paramsNode != null)
@@ -232,20 +240,71 @@ public class DeclarationChecker
                 var cur = scopes.Peek();
                 if (cur.LookupVariable(paramName) != null)
                 {
-                    diagnostics.Report(p, $"Parameter '{paramName}' duplicated");
+                    diagnostics.Report(p, $"Parámetro '{paramName}' duplicado");
                 }
                 else
                 {
-                    cur.DeclareVariable(paramName, string.Empty, p.Line);
+                    var typeNode = p.Children.Count > 0 ? p.Children[0] : null;
+                    cur.DeclareVariable(paramName, ParamTypeName(typeNode), p.Line);
                 }
             }
         }
 
         var body = node.FindChild("Body") ?? node.FindChild("Block");
         if (body != null)
-            visitNodeCallback(body);
+        {
+            var previous = (currentFunctionName, currentReturnType);
+            (currentFunctionName, currentReturnType) = (fnName, returnType);
+            try
+            {
+                visitNodeCallback(body);
+            }
+            finally
+            {
+                (currentFunctionName, currentReturnType) = previous;
+            }
 
-        if (scopes.Count > 0) scopes.Pop();
+            var returns = new List<Node>();
+            SemanticUtils.CollectNodes(body, "Return", returns);
+            if (!IsVoid(returnType) && returns.Count == 0)
+                diagnostics.Report(node, $"La función '{fnName}' debe devolver un valor de tipo '{returnType}'");
+        }
+
+        if (scopes.Count > 0)
+            scopes.Pop();
+    }
+
+    private string? currentFunctionName;
+    private string currentReturnType = string.Empty;
+
+    public bool InsideFunction => currentFunctionName != null;
+
+    private static bool IsVoid(string type) => string.Equals(type, ReservedWords.VOID, StringComparison.OrdinalIgnoreCase);
+
+    // Valida un 'return' contra el tipo de la función que se está recorriendo. Se llama durante el
+    // recorrido del cuerpo, cuando las variables locales del bloque todavía están en el alcance.
+    public void CheckReturn(Node ret)
+    {
+        if (currentFunctionName == null)
+            return;
+
+        var value = ret.Children.Count > 0 ? ret.Children[0] : null;
+        if (IsVoid(currentReturnType))
+        {
+            if (value != null)
+                diagnostics.Report(ret, $"La función void '{currentFunctionName}' no puede devolver un valor");
+            return;
+        }
+
+        if (value == null)
+        {
+            diagnostics.Report(ret, $"La función '{currentFunctionName}' debe devolver un valor de tipo '{currentReturnType}'");
+            return;
+        }
+
+        var valueType = typeResolver.Resolve(value);
+        if (!string.IsNullOrEmpty(valueType) && !CanAssign(currentReturnType, valueType))
+            diagnostics.Report(ret, $"Tipo de retorno incompatible en '{currentFunctionName}': se esperaba '{currentReturnType}' pero se encontró '{valueType}'");
     }
 
 
@@ -253,7 +312,8 @@ public class DeclarationChecker
 
     private void ValidateIdentifiersInExpression(Node? expr)
     {
-        if (expr == null) return;
+        if (expr == null)
+            return;
 
         if (expr.Type == "IDENTIFIER" || expr.Type == "Identifier")
         {
@@ -269,7 +329,7 @@ public class DeclarationChecker
         {
             var fname = SemanticUtils.ExtractIdentifierName(expr.FindChild("FunctionName"));
             if (!string.IsNullOrEmpty(fname) && !functions.ContainsKey(fname) && !builtins.ContainsKey(fname))
-                diagnostics.Report(expr, $"Function '{fname}' no definida");
+                diagnostics.Report(expr, $"Función '{fname}' no definida");
 
             var args = expr.FindChild("Arguments");
             if (args != null)
@@ -287,29 +347,20 @@ public class DeclarationChecker
         }
     }
 
-    private bool CanAssign(string targetType, string sourceType)
+    private static bool CanAssign(string targetType, string sourceType) => SemanticUtils.CanAssign(targetType, sourceType);
+
+    // Tipo de un parámetro con la misma notación que usan las variables:
+    // gear, chainsaw<gear>, y hogyoku<T> como chainsaw<chainsaw<T>>.
+    private static string ParamTypeName(Node? typeNode)
     {
-        if (SemanticUtils.IsNullLiteralType(sourceType))
-        {
-            if (SemanticUtils.IsNullLiteralType(targetType))
-                return true;
-            return SemanticUtils.SupportsNullAssignment(targetType);
-        }
+        if (typeNode == null || typeNode.Type == "Identifier")
+            return string.Empty;
+        if (typeNode.Children.Count == 0)
+            return typeNode.Type;
 
-        if (string.Equals(targetType, sourceType, StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        if (string.Equals(sourceType, TypeWords.GEAR, StringComparison.OrdinalIgnoreCase))
-        {
-            if (string.Equals(targetType, TypeWords.SHINKAI, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(targetType, TypeWords.BANKAI, StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-
-        if (string.Equals(sourceType, TypeWords.SHINKAI, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(targetType, TypeWords.BANKAI, StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        return false;
+        var element = typeNode.Children[0].Type;
+        if (string.Equals(typeNode.Type, TypeWords.HOGYOKU, StringComparison.OrdinalIgnoreCase))
+            return $"{TypeWords.CHAINSAW}<{TypeWords.CHAINSAW}<{element}>>";
+        return $"{typeNode.Type}<{element}>";
     }
 }

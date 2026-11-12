@@ -156,22 +156,22 @@ Errores a detectar:
 
 ### Opción 2: Desde Herramientas de Consola
 
-#### CompilationTester (Testing E2E)
+#### TestRunner (compila y ejecuta un archivo)
 ```powershell
-dotnet run --project tools/CompilationTester/CompilationTester.csproj
+dotnet run --project tools/TestRunner/TestRunner.csproj -- examples/test-01-variables-basicas.txt
 ```
 
-#### IDERunner (Archivos .kaizen)
+#### IDERunner (cualquier archivo de código)
 ```powershell
-# Copiar contenido del test a un archivo .kaizen
-dotnet run --project tools/IDERunner/IDERunner.csproj -- test-01.kaizen
+# Acepta cualquier extensión (.txt, .kaizen, .kz)
+dotnet run --project tools/IDERunner/IDERunner.csproj -- examples/test-01-variables-basicas.txt
 ```
 
 ### Opción 3: Testing Automatizado
 
 ```powershell
 # Ejecutar suite de tests xUnit
-dotnet test tools/Tests/Tests.csproj --logger "console;verbosity=detailed"
+dotnet test tools/Tests/KaizenLang.Tests.csproj --logger "console;verbosity=detailed"
 ```
 
 ---

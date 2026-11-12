@@ -1,9 +1,9 @@
-namespace ParadigmasLang;
+namespace KaizenLang.Core;
 
 public static class TypeWords
 {
     public const string GEAR = "gear"; // INTEGER
-    public const string SHINKAI = "shikai"; // FLOAT
+    public const string SHIKAI = "shikai"; // FLOAT
     public const string BANKAI = "bankai"; // DOUBLE
     public const string SHIN = "shin"; // BOOL
     public const string GRIMOIRE = "grimoire"; // STRING
@@ -14,7 +14,7 @@ public static class TypeWords
     public static readonly HashSet<string> Words = new HashSet<string>
     {
         GEAR,
-        SHINKAI,
+        SHIKAI,
         BANKAI,
         SHIN,
         GRIMOIRE

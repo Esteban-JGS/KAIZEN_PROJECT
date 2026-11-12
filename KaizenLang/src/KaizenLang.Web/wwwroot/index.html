@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KaizenLang Playground</title>
+    <meta name="description" content="Escribe y ejecuta programas KaizenLang en el navegador: compilador e intérprete educativo en C#/.NET compilado a WebAssembly." />
+    <meta name="theme-color" content="#0d120e" />
+    <base href="/" />
+    <link rel="icon" type="image/png" href="logo-64.png" />
+    <link rel="apple-touch-icon" href="logo-192.png" />
+    <link rel="stylesheet" href="css/app.css" />
+</head>
+
+<body>
+    <div id="app">
+        <div class="boot">
+            <img src="logo-192.png" alt="" width="96" height="96" />
+            <p>Cargando KaizenLang…</p>
+        </div>
+    </div>
+
+    <div id="blazor-error-ui">
+        Ocurrió un error inesperado.
+        <a href="." class="reload">Recargar</a>
+        <span class="dismiss">✕</span>
+    </div>
+
+    <script>
+        // Editor: Tab inserta 4 espacios y Ctrl+Enter no agrega un salto de línea (Blazor ejecuta el programa).
+        document.addEventListener('keydown', function (e) {
+            var el = e.target;
+            if (!el || el.id !== 'editor') return;
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+            } else if (e.key === 'Tab' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+                e.preventDefault();
+                var start = el.selectionStart, end = el.selectionEnd;
+                el.value = el.value.slice(0, start) + '    ' + el.value.slice(end);
+                el.selectionStart = el.selectionEnd = start + 4;
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        });
+    </script>
+    <script src="_framework/blazor.webassembly.js"></script>
+</body>
+
+</html>

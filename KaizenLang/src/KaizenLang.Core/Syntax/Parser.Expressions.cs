@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace ParadigmasLang;
+namespace KaizenLang.Core;
 
 public partial class Parser
 {
@@ -202,66 +202,64 @@ public partial class Parser
         fn.Line = tokens[pos].Line;
         fn.Column = tokens[pos].Column;
         node.Children.Add(fn);
-        pos++;
-        int openParenPos = pos;
-        pos++;
+        pos += 2; // nombre y '('
 
         var argsNode = new Node { Type = "Arguments" };
-        while (pos < tokens.Count && !(tokens[pos].Type == "DELIMITER" && tokens[pos].Value == ")"))
-        {
-            if (tokens[pos].Type == "DELIMITER" && tokens[pos].Value == ",")
-            {
-                pos++;
-                continue;
-            }
-            var arg = ParseExpression(tokens, ref pos);
-            argsNode.Children.Add(arg);
-        }
-
+        ParseCommaSeparated(tokens, ref pos, DelimiterWords.PAREN_CLOSE, argsNode, "los argumentos de la llamada");
         node.Children.Add(argsNode);
 
         node.Line = fn.Line;
         node.Column = fn.Column;
-
-        if (pos < tokens.Count && tokens[pos].Type == "DELIMITER" && tokens[pos].Value == ")")
-            pos++;
-
         return node;
     }
 
     private Node ParseArrayLiteral(List<Token> tokens, ref int pos)
     {
         Node arrayNode = new Node { Type = "ArrayLiteral" };
-        int start = pos;
-        pos++;
+        arrayNode.Line = tokens[pos].Line;
+        arrayNode.Column = tokens[pos].Column;
+        pos++; // '['
 
         var elementsNode = new Node { Type = "Elements" };
+        ParseCommaSeparated(tokens, ref pos, DelimiterWords.BRACKET_CLOSE, elementsNode, "el array");
+        arrayNode.Children.Add(elementsNode);
+        return arrayNode;
+    }
 
-        while (pos < tokens.Count && !(tokens[pos].Type == "DELIMITER" && tokens[pos].Value == "]"))
+    // Lee "expr, expr, ..." hasta el delimitador de cierre y lo consume. Si encuentra algo que no
+    // es una expresión, una coma o el cierre, agrega un nodo de error y se detiene: antes el bucle
+    // reintentaba sin avanzar y entradas como "[1, 2;" colgaban el compilador.
+    private void ParseCommaSeparated(List<Token> tokens, ref int pos, string closing, Node target, string context)
+    {
+        if (IsDelimiter(tokens, pos, closing))
         {
-            if (tokens[pos].Type == "DELIMITER" && tokens[pos].Value == ",")
+            pos++;
+            return;
+        }
+
+        while (true)
+        {
+            int before = pos;
+            var item = ParseExpression(tokens, ref pos);
+            target.Children.Add(item);
+            if (pos == before)
+                return; // ParseExpression ya dejó un nodo de error
+
+            if (IsDelimiter(tokens, pos, DelimiterWords.COMMA))
             {
                 pos++;
                 continue;
             }
 
-            var el = ParseExpression(tokens, ref pos);
-            elementsNode.Children.Add(el);
+            if (IsDelimiter(tokens, pos, closing))
+            {
+                pos++;
+                return;
+            }
+
+            target.Children.Add(ErrorNode($"Se esperaba ',' o '{closing}' en {context}", pos));
+            return;
         }
-
-        arrayNode.Children.Add(elementsNode);
-
-        arrayNode.Line = tokens[start].Line;
-        arrayNode.Column = tokens[start].Column;
-
-        if (pos < tokens.Count && tokens[pos].Type == "DELIMITER" && tokens[pos].Value == "]")
-            pos++;
-        else
-        {
-            arrayNode.Children.Add(ErrorNode("Se esperaba ']' al final del array", pos));
-        }
-
-        return arrayNode;
     }
 
     private Node ParseIndexAccess(List<Token> tokens, ref int pos)
@@ -273,57 +271,31 @@ public partial class Parser
         var currentNode = new Node("IDENTIFIER", new List<Node> { new Node(idTok.Value) }) { Line = idTok.Line, Column = idTok.Column };
         pos++;
 
-        while (pos < tokens.Count && tokens[pos].Type == "DELIMITER" && tokens[pos].Value == "[")
+        while (IsDelimiter(tokens, pos, "["))
         {
             pos++;
             var idxExpr = ParseExpression(tokens, ref pos);
-            if (pos < tokens.Count && tokens[pos].Type == "DELIMITER" && tokens[pos].Value == "]")
+            if (IsDelimiter(tokens, pos, "]"))
             {
                 pos++;
             }
             else
             {
                 var err = ErrorNode("Se esperaba ']' en indexador", pos);
-                var iaErr = new Node { Type = "IndexAccess" };
+                var iaErr = new Node { Type = "IndexAccess", Line = idTok.Line, Column = idTok.Column };
                 iaErr.Children.Add(currentNode);
                 iaErr.Children.Add(idxExpr);
                 iaErr.Children.Add(err);
                 return iaErr;
             }
 
-            var idxNode = new Node { Type = "IndexAccess" };
+            var idxNode = new Node { Type = "IndexAccess", Line = idTok.Line, Column = idTok.Column };
             idxNode.Children.Add(currentNode);
             idxNode.Children.Add(idxExpr);
             currentNode = idxNode;
         }
 
         return currentNode;
-    }
-
-    private Node ParsePrimaryOrUnaryExpression(List<Token> tokens, ref int pos)
-    {
-        if (pos < tokens.Count && tokens[pos].Type == "OPERATOR")
-        {
-            string opValue = tokens[pos].Value;
-            if (opValue == "-" || opValue == "!" || opValue == "+")
-            {
-                var unaryNode = new Node { Type = "UnaryExpression" };
-                unaryNode.Line = tokens[pos].Line;
-                unaryNode.Column = tokens[pos].Column;
-
-                var opNode = new Node { Type = "Operator", Children = { new Node { Type = opValue } } };
-                opNode.Line = tokens[pos].Line;
-                opNode.Column = tokens[pos].Column;
-                unaryNode.Children.Add(opNode);
-                pos++;
-
-                var operand = ParsePrimaryOrUnaryExpression(tokens, ref pos);
-                unaryNode.Children.Add(operand);
-                return unaryNode;
-            }
-        }
-
-        return ParsePrimaryExpression(tokens, ref pos);
     }
 
     private Node ParsePrimaryExpression(List<Token> tokens, ref int pos)
@@ -343,19 +315,21 @@ public partial class Parser
             return ParseFunctionCall(tokens, ref pos);
         }
 
-        if (tokens[pos].Type == "DELIMITER" && tokens[pos].Value == "(")
+        if (IsDelimiter(tokens, pos, "("))
         {
             pos++;
             var nested = ParseExpression(tokens, ref pos);
             var par = new Node { Type = "Parentheses", Children = { nested } };
             par.Line = tokens[Math.Max(0, pos - 1)].Line;
             par.Column = tokens[Math.Max(0, pos - 1)].Column;
-            if (pos < tokens.Count && tokens[pos].Type == "DELIMITER" && tokens[pos].Value == ")")
+            if (IsDelimiter(tokens, pos, ")"))
                 pos++;
+            else
+                par.Children.Add(ErrorNode("Se esperaba ')' para cerrar el paréntesis", pos));
             return par;
         }
 
-        if (tokens[pos].Type == "DELIMITER" && tokens[pos].Value == "[")
+        if (IsDelimiter(tokens, pos, "["))
         {
             return ParseArrayLiteral(tokens, ref pos);
         }

@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace ParadigmasLang;
+namespace KaizenLang.Core;
 
 internal class CharStream
 {

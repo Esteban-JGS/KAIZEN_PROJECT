@@ -1,0 +1,166 @@
+﻿@page "/"
+
+<PageTitle>KaizenLang Playground</PageTitle>
+
+<div class="toolbar">
+    <label class="field">
+        <span class="field-label">Ejemplo</span>
+        <select value="@selectedExample" @onchange="OnExampleChanged" aria-label="Cargar ejemplo">
+            <option value="">Programa propio</option>
+            @foreach (var example in Examples.All)
+            {
+                <option value="@example.Id">@example.Title</option>
+            }
+        </select>
+    </label>
+    <div class="actions">
+        <button class="btn btn-secondary" @onclick="Compile" disabled="@busy" title="Solo compila (Ctrl+Shift+Enter)">Compilar</button>
+        <button class="btn btn-primary" @onclick="Execute" disabled="@busy" title="Compila y ejecuta (Ctrl+Enter)">Ejecutar</button>
+    </div>
+</div>
+
+<div class="workspace">
+    <section class="panel editor-panel" aria-label="Editor">
+        <div class="panel-header">
+            <h2>Código</h2>
+            <span class="hint">Ctrl+Enter ejecuta</span>
+        </div>
+        <textarea id="editor" class="code" spellcheck="false" autocapitalize="off" autocomplete="off"
+                  @bind="code" @bind:event="oninput" @onkeydown="OnEditorKeyDown"
+                  aria-label="Código KaizenLang"></textarea>
+    </section>
+
+    <div class="side">
+        <section class="panel input-panel" aria-label="Entrada">
+            <div class="panel-header">
+                <h2>Entrada</h2>
+                <span class="hint">input() lee una palabra o línea por llamada</span>
+            </div>
+            <textarea class="code input" spellcheck="false" @bind="input" @bind:event="oninput"
+                      placeholder="Valores para input(), uno por línea" aria-label="Entrada del programa"></textarea>
+        </section>
+
+        <section class="panel output-panel" aria-label="Salida" aria-live="polite">
+            <div class="panel-header">
+                <h2>Salida</h2>
+                @if (result != null)
+                {
+                    <span class="status @(result.Success ? "ok" : "fail")">
+                        @StatusText(result) · @result.Elapsed.TotalMilliseconds.ToString("0") ms
+                    </span>
+                }
+            </div>
+            <div class="output">
+                @if (busy)
+                {
+                    <p class="muted">Ejecutando…</p>
+                }
+                else if (result == null)
+                {
+                    <p class="muted">Escribe un programa o elige un ejemplo y presiona <strong>Ejecutar</strong>.</p>
+                }
+                else
+                {
+                    @foreach (var diagnostic in result.Diagnostics)
+                    {
+                        <div class="line diagnostic">@diagnostic</div>
+                    }
+                    @foreach (var line in result.Output)
+                    {
+                        <div class="line @(line.StartsWith("Error de ejecución") ? "diagnostic" : line.StartsWith("Advertencia") ? "warning" : null)">@(line.Length == 0 ? " " : line)</div>
+                    }
+                    @if (result.Success && result.Diagnostics.Count == 0 && result.Output.Count == 0)
+                    {
+                        <p class="muted">@(lastWasExecution ? "(el programa no produjo salida)" : "Compilación exitosa, sin errores.")</p>
+                    }
+                }
+            </div>
+        </section>
+    </div>
+</div>
+
+<details class="reference">
+    <summary>Referencia rápida del lenguaje</summary>
+    <div class="reference-grid">
+        <div><h3>Tipos</h3><p><code>gear</code> entero · <code>shikai</code> decimal · <code>bankai</code> decimal doble · <code>shin</code> booleano · <code>grimoire</code> texto</p></div>
+        <div><h3>Colecciones</h3><p><code>chainsaw&lt;T&gt;</code> arreglo · <code>hogyoku&lt;T&gt;</code> matriz</p></div>
+        <div><h3>Bloques</h3><p><code>ying</code> abre · <code>yang</code> cierra</p></div>
+        <div><h3>Control</h3><p><code>if</code> / <code>else</code> · <code>while</code> · <code>do</code>…<code>while</code> · <code>for</code> · <code>return</code></p></div>
+        <div><h3>Funciones integradas</h3><p><code>output(...)</code> · <code>input()</code> · <code>length(x)</code></p></div>
+    </div>
+</details>
+
+@code {
+    private const string DefaultProgram =
+@"// Bienvenido a KaizenLang. Edita y presiona Ejecutar (Ctrl+Enter).
+gear factorial(gear n) ying
+    if (n <= 1) ying
+        return 1;
+    yang
+    return n * factorial(n - 1);
+yang
+
+chainsaw<gear> numeros = [1, 2, 3, 4, 5];
+for (gear i = 0; i < length(numeros); i++) ying
+    output(numeros[i] + ""! = "" + factorial(numeros[i]));
+yang
+";
+
+    private string code = DefaultProgram;
+    private string input = string.Empty;
+    private string selectedExample = string.Empty;
+    private RunResult? result;
+    private bool busy;
+    private bool lastWasExecution;
+
+    private void OnExampleChanged(ChangeEventArgs e)
+    {
+        selectedExample = e.Value?.ToString() ?? string.Empty;
+        var example = Examples.All.FirstOrDefault(x => x.Id == selectedExample);
+        if (example == null)
+            return;
+        code = example.Code;
+        input = example.Input;
+        result = null;
+    }
+
+    private Task Compile() => RunAsync(execute: false);
+
+    private Task Execute() => RunAsync(execute: true);
+
+    private async Task RunAsync(bool execute)
+    {
+        busy = true;
+        lastWasExecution = execute;
+        StateHasChanged();
+        await Task.Yield(); // deja que se pinte "Ejecutando…" antes de bloquear el hilo
+
+        try
+        {
+            result = KaizenRunner.Run(code, input, execute);
+        }
+        catch (Exception ex)
+        {
+            result = new RunResult(false, new[] { $"error interno: {ex.Message}" }, Array.Empty<string>(), TimeSpan.Zero);
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task OnEditorKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && (e.CtrlKey || e.MetaKey))
+            await RunAsync(execute: !e.ShiftKey);
+    }
+
+    private string StatusText(RunResult r)
+    {
+        if (r.Diagnostics.Count > 0)
+            return r.Diagnostics.Count == 1 ? "1 error" : $"{r.Diagnostics.Count} errores";
+        if (!r.Success)
+            return "Error de ejecución";
+        return lastWasExecution ? "Ejecución exitosa" : "Compilación exitosa";
+    }
+}
