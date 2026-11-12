@@ -530,13 +530,13 @@ Ejecuta la suite completa de tests del proyecto.
 
 ```bash
 # Ejecutar todos los tests
-dotnet test tools/Tests/Tests.csproj
+dotnet test tools/Tests/KaizenLang.Tests.csproj
 
 # Ejecutar con salida detallada
-dotnet test tools/Tests/Tests.csproj --logger "console;verbosity=detailed"
+dotnet test tools/Tests/KaizenLang.Tests.csproj --logger "console;verbosity=detailed"
 
 # Ejecutar un test específico
-dotnet test tools/Tests/Tests.csproj --filter "FullyQualifiedName~FunctionTests"
+dotnet test tools/Tests/KaizenLang.Tests.csproj --filter "FullyQualifiedName~FunctionTests"
 ```
 
 **Funcionalidades:**
@@ -604,7 +604,7 @@ Get-ChildItem examples\*.txt | ForEach-Object { dotnet run --project tools/IDERu
 
 ```bash
 # Después de modificar el compilador
-dotnet test tools/Tests/Tests.csproj --logger "console;verbosity=normal"
+dotnet test tools/Tests/KaizenLang.Tests.csproj --logger "console;verbosity=normal"
 ```
 
 ## 7. Referencia de Sintaxis

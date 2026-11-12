@@ -55,7 +55,10 @@ The project includes:
 3. Semantic analysis
 4. AST interpretation at runtime
 5. A dedicated desktop IDE
-6. CLI tools for execution and testing
+6. A web playground that runs the same compiler in the browser (WebAssembly)
+7. CLI tools for execution and testing
+
+**Try it online:** [kaizen-project-xi.vercel.app](https://kaizen-project-xi.vercel.app), no installation required.
 
 KaizenLang keeps familiar programming concepts (`if`, `for`, `while`, functions, arrays) while adding identity through custom block delimiters (`ying`, `yang`) and themed type names.
 
@@ -63,7 +66,8 @@ KaizenLang keeps familiar programming concepts (`if`, `for`, `while`, functions,
 
 ## Project Status
 
-- Functional and usable across language core, runners, and IDE.
+- Functional and usable across language core, runners, IDE, and web playground.
+- CI builds the whole solution, runs the xUnit suite, and checks formatting on every push and pull request.
 - Formal documentation is available in both Markdown and PDF.
 - The Windows IDE supports compile and run workflows.
 - Example suite is broad, including normal, edge, stress, and error cases.
@@ -105,7 +109,7 @@ KaizenLang keeps familiar programming concepts (`if`, `for`, `while`, functions,
 ### Primitive Types
 
 | KaizenLang Type | Meaning |
-|---|---|
+| --- | --- |
 | `gear` | Integer |
 | `shikai` | Float-like decimal |
 | `bankai` | Higher precision decimal |
@@ -115,7 +119,7 @@ KaizenLang keeps familiar programming concepts (`if`, `for`, `while`, functions,
 ### Composite Types
 
 | KaizenLang Type | Meaning |
-|---|---|
+| --- | --- |
 | `chainsaw<T>` | 1D collection |
 | `hogyoku<T>` | 2D collection |
 
@@ -185,7 +189,7 @@ KaizenLang/
 │  ├─ TestRunner/           # CLI runner for test files
 │  ├─ QuickRunner/          # embedded snippet quick run
 │  ├─ SnippetTester/        # target file snippet testing
-│  └─ Tests/                # xUnit projects
+│  └─ Tests/                # xUnit test project
 ├─ examples/                # functional, error, edge, and stress samples
 ├─ documentation/           # formal docs and editor setup notes
 ├─ Resources/               # app icon and visual assets
@@ -201,8 +205,8 @@ KaizenLang/
 - Core: `net9.0`
 - UI: `net9.0-windows`
 - App: `net9.0-windows`
-- Tools: mostly `net9.0-windows` or `net9.0-windows7.0`
-- Tests: `net9.0-windows` and `net9.0-windows7.0`
+- Web playground: `net9.0` (Blazor WebAssembly)
+- Tools and tests: `net9.0-windows`
 
 ### NuGet Packages (high level)
 
@@ -234,15 +238,16 @@ dotnet --info
 
 Official download page:
 
-- https://dotnet.microsoft.com/download
+- <https://dotnet.microsoft.com/download>
 
 ---
 
 ## Quick Start
 
-From repository root:
+The solution lives in the `KaizenLang/` folder; the commands below run from there:
 
 ```powershell
+cd KaizenLang
 dotnet restore KaizenLang.sln
 dotnet build KaizenLang.sln -c Release
 ```
@@ -292,6 +297,16 @@ dotnet run --project tools/QuickRunner/QuickRunner.csproj
 ```powershell
 dotnet run --project tools/SnippetTester/SnippetTester.csproj -- examples/test-15-casos-limite.txt
 ```
+
+### 6) Web playground
+
+```powershell
+dotnet run --project src/KaizenLang.Web/KaizenLang.Web.csproj
+```
+
+The playground is a Blazor WebAssembly app that references only `KaizenLang.Core`, so the browser runs the same lexer, parser, semantic analyzer and interpreter as the IDE. It includes the programs from `examples/` and a text box for `input()`.
+
+It is deployed on Vercel from the repository root: `vercel.json` runs `src/KaizenLang.Web/vercel-build.sh`, which installs the .NET 9 SDK in the build image and publishes the static site to `dist/wwwroot`.
 
 ---
 
@@ -365,16 +380,8 @@ Testing guide:
 
 ## Automated Tests
 
-Primary xUnit project:
-
 ```powershell
-dotnet test tools/Tests/KaizenLang.Tests.csproj
-```
-
-Alternate test project:
-
-```powershell
-dotnet test tools/Tests/Tests.csproj
+dotnet test KaizenLang.sln
 ```
 
 Current covered domains include:
@@ -383,12 +390,13 @@ Current covered domains include:
 - semantic collection validation
 - declaration checks
 - null-handling behavior
+- regression cases for the parser, semantic analyzer and interpreter (`RegressionTests.cs`)
 
 ---
 
 ## Useful Environment Variables
 
-### `PARADIGMAS_LOG_LEVEL`
+### `KAIZEN_LOG_LEVEL`
 
 Controls logger verbosity in Core.
 
@@ -403,7 +411,7 @@ Values:
 Example:
 
 ```powershell
-$env:PARADIGMAS_LOG_LEVEL="Debug"
+$env:KAIZEN_LOG_LEVEL="Debug"
 ```
 
 ### `KAIZEN_VERBOSE_OUTPUT`
@@ -422,15 +430,13 @@ $env:KAIZEN_VERBOSE_OUTPUT="1"
 
 These are reflected in the current codebase behavior:
 
-- IDE is Windows-only (`net9.0-windows`).
-- `while` loops include a safety iteration cutoff.
-- `for` loops have a runtime iteration cap (1000).
-- recursion depth is capped by default (100).
-- IDE execution service applies a 5-second execution timeout.
+- The desktop IDE is Windows-only (`net9.0-windows`); the web playground runs anywhere.
+- `while`, `do-while` and `for` loops stop after 10,000 iterations with a warning.
+- Recursion depth is capped by default (100).
+- The IDE stops a program after 5 seconds of execution (time spent answering `input()` does not count); the web playground stops it after 2,000,000 evaluation steps.
 - `input()` tokenizes by whitespace, full free-form line input is limited.
-- `do-while` is parsed, but does not have an explicit runtime dispatch branch in the interpreter switch.
-- SVG icon loading expects `Resources/icons/*.svg`, while branding assets in this repository are primarily under `Resources/assets` and `Resources/icon.ico`.
-- Some old test snippets still use legacy names (`integer`, `string`) while current canonical names are `gear`, `grimoire`, etc.
+- Functions must be declared before they are called.
+- SVG menu icons are loaded from `Resources/icons/*.svg`, which is not included in the repository, so IDE menus show text only.
 
 ---
 
@@ -447,10 +453,7 @@ dotnet --info
 
 ### Tests fail due to path assumptions
 
-Use current project paths:
-
-- `tools/Tests/KaizenLang.Tests.csproj`
-- `tools/Tests/Tests.csproj`
+Run the commands from the `KaizenLang/` folder (where `KaizenLang.sln` lives). The test project is `tools/Tests/KaizenLang.Tests.csproj`.
 
 ### Program appears blocked waiting for input
 
@@ -481,7 +484,7 @@ Expected behavior, the UI stack is WinForms-based.
 - Professor: Josias Ariel Chaves Murillo
 - Term: II 2025
 - Students:
-  - Esteban Javier Granados Sibaja 
+  - Esteban Javier Granados Sibaja
   - Juan Carlos Camacho Solano
 
 ---
