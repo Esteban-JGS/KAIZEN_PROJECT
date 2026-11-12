@@ -1,0 +1,30 @@
+name: 'Format: dotnet-format'
+
+on:
+  push:
+    branches: [ 'base', 'main', 'master' ]
+  pull_request:
+    branches: [ 'base', 'main', 'master' ]
+
+jobs:
+  dotnet-format:
+    name: Check code format
+    # Los proyectos apuntan a net9.0-windows (WinForms); restaurarlos en Linux falla sin EnableWindowsTargeting.
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: KaizenLang
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      # Nivel warn: el .editorconfig marca como warning lo obligatorio (p. ej. namespaces de archivo); el resto son sugerencias.
+      # `dotnet format` viene incluido en el SDK desde .NET 6; ya no hace falta instalar la herramienta global.
+      - name: Run dotnet format (verify)
+        run: dotnet format KaizenLang.sln --verify-no-changes --severity warn
