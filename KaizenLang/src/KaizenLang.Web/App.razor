@@ -1,0 +1,11 @@
+﻿<Router AppAssembly="@typeof(App).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
+    </Found>
+    <NotFound>
+        <PageTitle>KaizenLang Playground</PageTitle>
+        <LayoutView Layout="@typeof(MainLayout)">
+            <p role="alert" class="not-found">Esta página no existe. <a href="./">Volver al playground</a></p>
+        </LayoutView>
+    </NotFound>
+</Router>

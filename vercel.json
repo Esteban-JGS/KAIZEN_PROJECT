@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "bash KaizenLang/src/KaizenLang.Web/vercel-build.sh",
+  "outputDirectory": "dist/wwwroot"
+}
