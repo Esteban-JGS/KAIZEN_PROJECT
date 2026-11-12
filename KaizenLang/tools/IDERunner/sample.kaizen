@@ -4,9 +4,9 @@ yang
 
 saludar();
 
-integer sumar(integer a, integer b) ying
+gear sumar(gear a, gear b) ying
     return a + b;
 yang
 
-integer resultado = sumar(5, 3);
+gear resultado = sumar(5, 3);
 output("El resultado de la suma es: " + resultado);

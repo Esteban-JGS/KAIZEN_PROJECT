@@ -2,7 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
-using ParadigmasLang;
+using KaizenLang.Core;
 
 namespace KaizenLang.UI.Services;
 
@@ -22,7 +22,7 @@ public class CompilationService
 
     public CompilationResult CompileCode(string source)
     {
-        ParadigmasLang.Logging.Logger.Debug("CompilationService.CompileCode START");
+        KaizenLang.Core.Logging.Logger.Debug("CompilationService.CompileCode START");
 
         var stageOutcomes = new List<CompilationStageOutcome>();
         outputBuilder.Clear();
@@ -92,7 +92,7 @@ public class CompilationService
 
     private CompilationResult PerformCompilationStages(string source, List<CompilationStageOutcome> stageOutcomes)
     {
-        ParadigmasLang.Logging.Logger.Debug("PerformCompilationStages START");
+        KaizenLang.Core.Logging.Logger.Debug("PerformCompilationStages START");
 
         var result = new CompilationResult();
 
@@ -127,7 +127,7 @@ public class CompilationService
         CompilationResult result,
         List<CompilationStageOutcome> stageOutcomes)
     {
-    AppendPhaseHeader("FASE 1: ANALISIS LEXICO");
+        AppendPhaseHeader("FASE 1: ANALISIS LEXICO");
 
         try
         {
@@ -135,15 +135,15 @@ public class CompilationService
             tokens = lexer.Tokenize(source);
 
             var invalidTokens = tokens.Where(t => t.Type == "INVALID").ToList();
-            var reservedTokens = tokens.Where(t => t.Type == "RESERVED_WORD").ToList();
+            var reservedTokens = tokens.Where(t => t.Type == "RESERVED").ToList();
             var identifierTokens = tokens.Where(t => t.Type == "IDENTIFIER").ToList();
-            var literalTokens = tokens.Where(t => t.Type.Contains("LITERAL")).ToList();
+            var literalTokens = tokens.Where(t => t.Type is "INT" or "FLOAT" or "STRING" or "CHAR" or "LITERAL").ToList();
 
             if (invalidTokens.Any())
             {
                 foreach (var invalidToken in invalidTokens)
                 {
-                    AppendError($"error léxico: token inválido '{invalidToken.Value}' en la línea {invalidToken.Line}, columna {invalidToken.Column}.");
+                    AppendError($"error léxico: {invalidToken.Value} en la línea {invalidToken.Line}, columna {invalidToken.Column}.");
                 }
 
                 result.LexicalErrors = invalidTokens;
@@ -272,7 +272,7 @@ public class CompilationService
         CompilationResult result,
         List<CompilationStageOutcome> stageOutcomes)
     {
-    AppendPhaseHeader("FASE 3: ANALISIS SEMANTICO");
+        AppendPhaseHeader("FASE 3: ANALISIS SEMANTICO");
 
         try
         {
@@ -357,9 +357,9 @@ public class CompilationService
         AppendInfo("Metricas de complejidad:");
         AppendInfo("-------------------------");
 
-        var functions = CountNodesByType(ast, "FUNCTION");
-        var conditionals = CountNodesByType(ast, "IF") + CountNodesByType(ast, "WHILE") + CountNodesByType(ast, "FOR");
-        var variables = CountNodesByType(ast, "VARIABLE_DECLARATION");
+        var functions = CountNodesByType(ast, "Function");
+        var conditionals = CountNodesByType(ast, "If") + CountNodesByType(ast, "While") + CountNodesByType(ast, "DoWhile") + CountNodesByType(ast, "For");
+        var variables = CountNodesByType(ast, "VariableDeclaration");
 
         AppendInfo($"   Funciones definidas: {functions}");
         AppendInfo($"   Estructuras de control: {conditionals}");

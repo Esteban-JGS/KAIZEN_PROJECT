@@ -1,7 +1,7 @@
 using System;
 using System.IO;
+using KaizenLang.Core;
 using KaizenLang.UI.Services;
-using ParadigmasLang;
 
 class Program
 {
@@ -45,7 +45,8 @@ class Program
         totalErrors += res.LexicalErrors?.Count ?? 0;
         totalErrors += res.SyntaxErrors?.Count ?? 0;
         totalErrors += res.SemanticErrors?.Count ?? 0;
-        if (res.InternalError != null) totalErrors++;
+        if (res.InternalError != null)
+            totalErrors++;
 
         Console.WriteLine($"• Compilación: {(res.IsSuccessful ? "OK" : "FAILED")} | Errores: {totalErrors}");
         Console.WriteLine();

@@ -1,8 +1,22 @@
+using KaizenLang.Core;
 using KaizenLang.UI.Services;
-using ParadigmasLang;
 
-var testFile = args.Length > 0 ? args[0] : "test-all-snippets.txt";
-var basePath = @"c:\Users\esteb\OneDrive\Escritorio\KAIZEN_PROJECT\KaizenLang\";
+if (args.Length == 0)
+{
+    Console.WriteLine("Uso: SnippetTester <archivo> (ruta absoluta o relativa a la carpeta KaizenLang, p. ej. examples/test-15-casos-limite.txt)");
+    return 1;
+}
+var testFile = args[0];
+// Raíz de KaizenLang (carpeta con KaizenLang.sln), buscada desde el ejecutable; si no aparece, se usa el directorio actual.
+var basePath = Directory.GetCurrentDirectory();
+for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+{
+    if (File.Exists(Path.Combine(dir.FullName, "KaizenLang.sln")))
+    {
+        basePath = dir.FullName;
+        break;
+    }
+}
 var filePath = Path.Combine(basePath, testFile);
 
 if (!File.Exists(filePath))

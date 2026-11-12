@@ -1,6 +1,6 @@
 using System;
 using System.IO;
-using ParadigmasLang;
+using KaizenLang.Core;
 using KaizenLang.UI.Services;
 
 if (args.Length == 0)
