@@ -1,62 +1,73 @@
-namespace ParadigmasLang;
+namespace KaizenLang.Core;
 
 public partial class Parser
 {
+    // Nodo de error ubicado en el token 'pos' (o en el último, si el archivo terminó antes).
     private Node ErrorNode(string mensaje, int pos)
     {
-        // Usar la información de línea y columna del token si está disponible
-        if (_currentTokens != null && pos < _currentTokens.Count)
+        int line = 1, column = 1;
+        if (_currentTokens != null && _currentTokens.Count > 0)
         {
-            var token = _currentTokens[pos];
-            var n = new Node { Type = "Error", Line = token.Line, Column = token.Column };
-            n.Children.Add(new Node { Type = $"{mensaje} (línea {token.Line}, columna {token.Column})" });
-            return n;
+            var token = _currentTokens[Math.Min(pos, _currentTokens.Count - 1)];
+            line = token.Line;
+            column = token.Column;
         }
-        else if (_currentTokens != null && _currentTokens.Count > 0)
-        {
-            // Si estamos al final, usar el último token
-            var lastToken = _currentTokens[_currentTokens.Count - 1];
-            var n = new Node { Type = "Error", Line = lastToken.Line, Column = lastToken.Column };
-            n.Children.Add(new Node { Type = $"{mensaje} (línea {lastToken.Line}, columna {lastToken.Column})" });
-            return n;
-        }
-        else
-        {
-            // Fallback al formato antiguo si no hay tokens disponibles
-            var n = new Node { Type = "Error", Line = 1, Column = 1 };
-            n.Children.Add(new Node { Type = $"{mensaje} (línea 1, columna 1)" });
-            return n;
-        }
+        return CreateError(mensaje, line, column);
     }
 
-    private Node ErrorNodeWithLocation(string mensaje, List<Token> tokens, int pos)
+    // Para faltantes como ';': el error se ubica justo después del token anterior y no en el siguiente,
+    // que puede estar en otra línea y confundir ("falta ';'" señalando la línea de abajo).
+    private Node ErrorAfterPrevious(string mensaje, int pos)
     {
-        if (pos < tokens.Count)
+        if (_currentTokens == null || pos <= 0 || pos > _currentTokens.Count)
+            return ErrorNode(mensaje, pos);
+
+        var previous = _currentTokens[pos - 1];
+        var length = previous.Value.Length + (previous.Type == "STRING" ? 2 : 0); // comillas no incluidas en Value
+        var error = CreateError(mensaje, previous.Line, previous.Column + length);
+        error.Value = MissingTerminatorMarker;
+        return error;
+    }
+
+    // Marca los errores de "falta X al final": la sentencia ya se leyó completa y no hay que saltar tokens.
+    private const string MissingTerminatorMarker = "missing-terminator";
+
+    // Falta ';' al final de una sentencia. Si la sentencia ya tenía un error propio (p. ej. "[1 2 3]"),
+    // ese error explica mejor el problema y se devuelve en lugar del de ';'.
+    private Node MissingSemicolon(Node statement, string mensaje, int pos)
+    {
+        return FirstError(statement) ?? ErrorAfterPrevious(mensaje, pos);
+    }
+
+    private static Node? FirstError(Node node)
+    {
+        if (node.Type == Node.ErrorType)
+            return node;
+        foreach (var child in node.Children)
         {
-            var token = tokens[pos];
-            var n = new Node { Type = "Error", Line = token.Line, Column = token.Column };
-            n.Children.Add(new Node { Type = $"{mensaje} (línea {token.Line}, columna {token.Column})" });
-            return n;
+            var found = FirstError(child);
+            if (found != null)
+                return found;
         }
-        else if (tokens.Count > 0)
-        {
-            // Si estamos al final, usar el último token
-            var lastToken = tokens[tokens.Count - 1];
-            var n = new Node { Type = "Error", Line = lastToken.Line, Column = lastToken.Column };
-            n.Children.Add(new Node { Type = $"{mensaje} (línea {lastToken.Line}, columna {lastToken.Column})" });
-            return n;
-        }
-        else
-        {
-            var n = new Node { Type = "Error", Line = 0, Column = 0 };
-            n.Children.Add(new Node { Type = $"{mensaje} (línea 1, columna 1)" });
-            return n;
-        }
+        return null;
+    }
+
+    private static Node CreateError(string mensaje, int line, int column)
+    {
+        var n = new Node { Type = Node.ErrorType, Line = line, Column = column };
+        n.Children.Add(new Node { Type = $"{mensaje} (línea {line}, columna {column})" });
+        return n;
     }
 
     private bool Match(List<Token> tokens, int pos, string type, string value)
     {
         return pos < tokens.Count && tokens[pos].Type == type && tokens[pos].Value == value;
+    }
+
+    // Verifica límites antes de leer: el código fuente puede terminar en cualquier punto (p. ej. "while" al final).
+    private static bool IsDelimiter(List<Token> tokens, int pos, string value)
+    {
+        return pos < tokens.Count && tokens[pos].Type == "DELIMITER" && tokens[pos].Value == value;
     }
 
     private bool IsFunctionDeclaration(List<Token> tokens, int pos)
@@ -101,7 +112,7 @@ public partial class Parser
     {
         if (pos >= tokens.Count)
             return false;
-        if (tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.BLOCK_END)
+        if (IsDelimiter(tokens, pos, DelimiterWords.BLOCK_END))
             return false;
         int tempPos = pos;
         int parenLevel = 0;
@@ -125,7 +136,7 @@ public partial class Parser
     private Node ParseParams(List<Token> tokens, ref int pos)
     {
         var parameters = new Node("Parameters");
-        while (tokens[pos].Type != "DELIMITER" || tokens[pos].Value != DelimiterWords.PAREN_CLOSE)
+        while (pos < tokens.Count && !IsDelimiter(tokens, pos, DelimiterWords.PAREN_CLOSE))
         {
             if (tokens[pos].Type == "TYPE" || (tokens[pos].Type == "IDENTIFIER" && TypeWords.CompositeWrappers.Contains(tokens[pos].Value)))
             {
@@ -171,8 +182,13 @@ public partial class Parser
                     var paramNode = new Node("Param", new List<Node> { typeNode, nameNode }) { Line = typeNode.Line, Column = typeNode.Column };
                     parameters.Children.Add(paramNode);
                     pos++;
-                    if (pos < tokens.Count && tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.COMMA)
+                    if (IsDelimiter(tokens, pos, DelimiterWords.COMMA))
                         pos++;
+                    else if (!IsDelimiter(tokens, pos, DelimiterWords.PAREN_CLOSE))
+                    {
+                        parameters.Children.Add(ErrorNode("Se esperaba ',' o ')' después del parámetro", pos));
+                        break;
+                    }
                 }
                 else
                 {
@@ -182,10 +198,10 @@ public partial class Parser
             }
             else if (tokens[pos].Type == "IDENTIFIER")
             {
-                parameters.Children.Add(new Node("Param", new List<Node> { new Node("Identifier", new List<Node> { new Node(tokens[pos].Type) }) }));
-                pos++;
+                parameters.Children.Add(ErrorNode($"El parámetro '{tokens[pos].Value}' necesita un tipo", pos));
+                break;
             }
-            else if (tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.COMMA)
+            else if (IsDelimiter(tokens, pos, DelimiterWords.COMMA))
             {
                 return ErrorNode("Coma inesperada o parámetro faltante.", pos);
             }

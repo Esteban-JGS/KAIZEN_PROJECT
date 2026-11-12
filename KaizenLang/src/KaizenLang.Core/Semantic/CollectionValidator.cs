@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace ParadigmasLang;
+namespace KaizenLang.Core;
 
 public class CollectionValidator
 {
@@ -70,7 +70,7 @@ public class CollectionValidator
                 rowIndex++;
             }
         }
-    else if (declaredType.IndexOf(TypeWords.CHAINSAW, StringComparison.OrdinalIgnoreCase) >= 0)
+        else if (declaredType.IndexOf(TypeWords.CHAINSAW, StringComparison.OrdinalIgnoreCase) >= 0)
         {
             var elements = arrayLiteral.FindChild("Elements");
             if (elements == null)
@@ -89,12 +89,15 @@ public class CollectionValidator
 
     private Node? FindDescendant(Node root, string type)
     {
-        if (root == null) return null;
-        if (root.Type == type) return root;
+        if (root == null)
+            return null;
+        if (root.Type == type)
+            return root;
         foreach (var c in root.Children)
         {
             var found = FindDescendant(c, type);
-            if (found != null) return found;
+            if (found != null)
+                return found;
         }
         return null;
     }
@@ -108,7 +111,7 @@ public class CollectionValidator
         if (IsNullLiteral(actualType) || IsTypeCompatible(expectedType, actualType))
             return;
 
-    var target = isMatrix ? "hogyoku" : "chainsaw";
+        var target = isMatrix ? "hogyoku" : "chainsaw";
         diagnostics.Report(elementExpr, $"Tipo incompatible en inicialización de {target}: se esperaba '{expectedType}' pero se encontró '{actualType}' ({locationLabel})");
     }
 
@@ -124,7 +127,7 @@ public class CollectionValidator
 
         if (IsNumericType(expected) && IsNumericType(actual))
         {
-            if (string.Equals(expected, TypeWords.SHINKAI, StringComparison.OrdinalIgnoreCase) && string.Equals(actual, TypeWords.GEAR, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(expected, TypeWords.SHIKAI, StringComparison.OrdinalIgnoreCase) && string.Equals(actual, TypeWords.GEAR, StringComparison.OrdinalIgnoreCase))
                 return true;
             if (string.Equals(expected, TypeWords.BANKAI, StringComparison.OrdinalIgnoreCase))
                 return true;
@@ -136,7 +139,7 @@ public class CollectionValidator
     private static bool IsNumericType(string typeName)
     {
         return string.Equals(typeName, TypeWords.GEAR, StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(typeName, TypeWords.SHINKAI, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(typeName, TypeWords.SHIKAI, StringComparison.OrdinalIgnoreCase) ||
                string.Equals(typeName, TypeWords.BANKAI, StringComparison.OrdinalIgnoreCase);
     }
 }

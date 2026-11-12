@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 
-namespace ParadigmasLang;
+namespace KaizenLang.Core;
 
 public class SymbolTable
 {

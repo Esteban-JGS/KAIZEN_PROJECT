@@ -1,245 +1,66 @@
-namespace ParadigmasLang;
+using System.Globalization;
+
+namespace KaizenLang.Core;
 
 public partial class Interpreter
 {
+    // El parser genera expresiones binarias como [izquierdo, Operator, derecho]. Las llamadas a funciones
+    // (incluidas output, input y length) son operandos normales y se evalúan con ExecuteNode; antes había
+    // atajos para builtins que devolvían la llamada e ignoraban el resto, p. ej. length(a) - 1 daba length(a).
     private object? ExecuteExpression(Node node)
     {
         if (node.Children.Count == 0)
             return null;
 
-        // DEBUG: Log node type
-        ParadigmasLang.Logging.Logger.Debug($"ExecuteExpression: node.Type = '{node.Type}', Children = {node.Children.Count}");
-
-        // Handle direct FunctionCall nodes (from new parser)
-        if (node.Type == "FunctionCall")
-        {
-            // Extract function name
-            string fname = string.Empty;
-            Node? argsNode = null;
-
-            if (node.Children.Count > 0)
-            {
-                var nameNode = node.Children[0]; // FunctionName node
-                ParadigmasLang.Logging.Logger.Debug($"  nameNode.Type = '{nameNode.Type}', Children = {nameNode.Children.Count}");
-                fname = SemanticUtils.ExtractIdentifierName(nameNode) ?? string.Empty;
-                ParadigmasLang.Logging.Logger.Debug($"  Extracted function name: '{fname}'");
-            }
-
-            if (node.Children.Count > 1)
-            {
-                argsNode = node.Children[1]; // Arguments node
-            }
-
-            // Handle builtin functions
-            if (string.Equals(fname, ReservedWords.OUTPUT, System.StringComparison.OrdinalIgnoreCase))
-            {
-                var outputValues = new List<string>();
-                if (argsNode != null && argsNode.Children.Count > 0)
-                {
-                    foreach (var arg in argsNode.Children)
-                    {
-                        var val = ExecuteNode(arg);
-                        outputValues.Add(val?.ToString() ?? "null");
-                    }
-                }
-                output.Add(string.Join(" ", outputValues));
-                return null;
-            }
-
-            if (string.Equals(fname, ReservedWords.INPUT, System.StringComparison.OrdinalIgnoreCase))
-            {
-                string? prompt = null;
-                if (argsNode != null && argsNode.Children.Count > 0)
-                {
-                    var firstArgNode = argsNode.Children[0];
-                    // If argument is an identifier, treat as input(varName) -> read and assign to variable
-                    if (firstArgNode.Type == "IDENTIFIER")
-                    {
-                        string varName;
-                        if (firstArgNode.Children.Count > 0)
-                            varName = firstArgNode.Children[0].Type;
-                        else
-                            varName = firstArgNode.Type;
-
-                        var tokenLine = ReadNextInputToken(null);
-                        if (tokenLine == null)
-                            return null;
-
-                        var symbol = currentScope.LookupVariable(varName);
-                        object? finalVal = tokenLine;
-                        if (symbol != null)
-                        {
-                            var targetType = ExtractPrimitiveType(symbol.Type);
-                            finalVal = ConvertTokenToType(tokenLine, targetType);
-                                currentScope.SetVariableValue(varName, finalVal);
-                            if (VerboseMode)
-                                output.Add($"Variable '{varName}' asignada con valor: {finalVal}");
-                        }
-                        else
-                        {
-                            // If variable not declared, just return the token string
-                            return tokenLine;
-                        }
-
-                        return finalVal;
-                    }
-
-                    var firstArg = ExecuteNode(firstArgNode);
-                    prompt = firstArg?.ToString();
-                }
-                var token = ReadNextInputToken(prompt);
-                return token;
-            }
-
-            if (string.Equals(fname, "length", System.StringComparison.OrdinalIgnoreCase))
-            {
-                return ExecuteLengthBuiltin(argsNode);
-            }
-
-            // If not a builtin, try user-defined function
-            return ExecuteFunctionCall(node);
-        }
-
-        // Prefer canonical FunctionCall node shape for builtins (wrapped in Expression)
-        if (node.Children.Count > 0 && node.Children[0].Type == "FunctionCall")
-        {
-            var fn = node.Children[0];
-            if (fn.Children.Count > 0)
-            {
-                var nameNode = fn.Children[0];
-                var fname = SemanticUtils.ExtractIdentifierName(nameNode) ?? string.Empty;
-
-                Node? argsNode = null;
-                if (fn.Children.Count > 1)
-                    argsNode = fn.Children[1];
-
-                if (string.Equals(fname, ReservedWords.OUTPUT, System.StringComparison.OrdinalIgnoreCase))
-                {
-                    var outputValues = new List<string>();
-                    if (argsNode != null && argsNode.Children.Count > 0)
-                    {
-                        foreach (var arg in argsNode.Children)
-                        {
-                            var val = ExecuteNode(arg);
-                            outputValues.Add(val?.ToString() ?? "null");
-                        }
-                    }
-                    output.Add(string.Join(" ", outputValues));
-                    return null;
-                }
-
-                if (string.Equals(fname, ReservedWords.INPUT, System.StringComparison.OrdinalIgnoreCase))
-                {
-                    string? prompt = null;
-                    if (argsNode != null && argsNode.Children.Count > 0)
-                    {
-                        var firstArgNode = argsNode.Children[0];
-                        // If argument is an identifier, treat as input(varName) -> read and assign to variable
-                        if (firstArgNode.Type == "IDENTIFIER")
-                        {
-                            string varName;
-                            if (firstArgNode.Children.Count > 0)
-                                varName = firstArgNode.Children[0].Type;
-                            else
-                                varName = firstArgNode.Type;
-
-                            var tokenLine = ReadNextInputToken(null);
-                            if (tokenLine == null)
-                                return null;
-
-                            var symbol = currentScope.LookupVariable(varName);
-                            object? finalVal = tokenLine;
-                            if (symbol != null)
-                            {
-                    var targetType = ExtractPrimitiveType(symbol.Type);
-                    finalVal = ConvertTokenToType(tokenLine, targetType);
-                                currentScope.SetVariableValue(varName, finalVal);
-                                if (VerboseMode)
-                                    output.Add($"Variable '{varName}' asignada con valor: {finalVal}");
-                            }
-                            else
-                            {
-                                // If variable not declared, just return the token string
-                                return tokenLine;
-                            }
-
-                            return finalVal;
-                        }
-
-                        var firstArg = ExecuteNode(firstArgNode);
-                        prompt = firstArg?.ToString();
-                    }
-                    var token = ReadNextInputToken(prompt);
-                    return token;
-                }
-
-                if (string.Equals(fname, "length", System.StringComparison.OrdinalIgnoreCase))
-                {
-                    return ExecuteLengthBuiltin(argsNode);
-                }
-            }
-        }
-
-        // NOTE: we only support the canonical FunctionCall AST shape now.
-        // Older/fallback AST shapes were removed to simplify runtime behavior.
-
         if (node.Children.Count == 1)
             return ExecuteNode(node.Children[0]);
 
-        // Operaciones binarias
-        if (node.Children.Count >= 2)
+        if (node.Children.Count % 2 == 0)
+            throw new Exception("Expresión mal formada: falta un operando");
+
+        var left = ExecuteNode(node.Children[0]);
+        for (int i = 1; i < node.Children.Count; i += 2)
         {
-            var left = ExecuteNode(node.Children[0]);
+            var operatorNode = node.Children[i];
+            if (operatorNode.Type != "Operator" || operatorNode.Children.Count == 0)
+                throw new Exception("Expresión mal formada: se esperaba un operador");
 
-            for (int i = 1; i < node.Children.Count; i++)
+            var op = operatorNode.Children[0].Type;
+            var rightNode = node.Children[i + 1];
+
+            // && y || solo evalúan el lado derecho cuando hace falta, como en C/Java:
+            // así "i < length(a) && a[i] == 0" no indexa fuera de rango.
+            if (op == OperatorWords.AND || op == OperatorWords.OR)
             {
-                var operatorNode = node.Children[i];
-                if (operatorNode.Type == "Operator" && operatorNode.Children.Count > 0)
-                {
-                    var op = operatorNode.Children[0].Type;
-
-                    // El operando derecho puede estar anidado
-                    Node rightOperandNode;
-                    if (i + 1 < node.Children.Count)
-                    {
-                        rightOperandNode = node.Children[i + 1];
-                    }
-                    else if (operatorNode.Children.Count > 1)
-                    {
-                        rightOperandNode = operatorNode.Children[1];
-                    }
-                    else
-                    {
-                        throw new Exception("Falta el operando derecho para el operador " + op);
-                    }
-
-                    var right = ExecuteNode(rightOperandNode);
-                    left = EvaluateOperation(left, op, right);
-                    i++; // Skip next operand since we processed it
-                }
+                var leftBool = ToBoolean(left, op);
+                bool decided = op == OperatorWords.AND ? !leftBool : leftBool;
+                left = decided ? leftBool : ToBoolean(ExecuteNode(rightNode), op);
+                continue;
             }
-            return left;
-        }
 
-        return null;
+            left = EvaluateOperation(left, op, ExecuteNode(rightNode));
+        }
+        return left;
+    }
+
+    private static bool ToBoolean(object? value, string op)
+    {
+        if (value is bool b)
+            return b;
+        throw new Exception($"El operador '{op}' requiere valores shin, se recibió {DescribeType(value)}");
     }
 
     private object EvaluateOperation(object? left, string op, object? right)
     {
-        // Convertir valores para operaciones
         if (op == OperatorWords.EQUAL || op == OperatorWords.NOT_EQUAL)
         {
             if (left == null || right == null)
-                return op == OperatorWords.EQUAL ? object.Equals(left, right) : !object.Equals(left, right);
+                return op == OperatorWords.EQUAL ? Equals(left, right) : !Equals(left, right);
         }
 
-        // If either operand is a string and operator is '+', perform concatenation
-        if (op == "+" && (left is string || right is string))
-        {
-            var l = left?.ToString() ?? "null";
-            var r = right?.ToString() ?? "null";
-            return l + r;
-        }
+        // Con '+' y al menos un texto, se concatena usando el mismo formato que output().
+        if (op == OperatorWords.ADD && (left is string || right is string))
+            return FormatValue(left) + FormatValue(right);
 
         if (left is string leftStr && right is string rightStr)
         {
@@ -250,9 +71,13 @@ public partial class Interpreter
                 case OperatorWords.NOT_EQUAL:
                     return leftStr != rightStr;
                 default:
-                    throw new Exception($"Operación '{op}' no soportada para strings");
+                    throw new Exception($"Operación '{op}' no soportada para textos");
             }
         }
+
+        // gear con gear se calcula en enteros: 7 / 2 == 3 y 7 % 2 == 1.
+        if (IsInteger(left) && IsInteger(right))
+            return EvaluateIntegerOperation(Convert.ToInt64(left), op, Convert.ToInt64(right));
 
         if (TryConvertToDouble(left, out double leftNum) && TryConvertToDouble(right, out double rightNum))
         {
@@ -267,7 +92,7 @@ public partial class Interpreter
                 case OperatorWords.DIVIDE:
                     return rightNum != 0 ? leftNum / rightNum : throw new Exception("División por cero");
                 case OperatorWords.MODULO:
-                    return leftNum % rightNum;
+                    return rightNum != 0 ? leftNum % rightNum : throw new Exception("Módulo por cero");
                 case OperatorWords.EQUAL:
                     return leftNum == rightNum;
                 case OperatorWords.NOT_EQUAL:
@@ -289,10 +114,6 @@ public partial class Interpreter
         {
             switch (op)
             {
-                case OperatorWords.AND:
-                    return leftBool && rightBool;
-                case OperatorWords.OR:
-                    return leftBool || rightBool;
                 case OperatorWords.EQUAL:
                     return leftBool == rightBool;
                 case OperatorWords.NOT_EQUAL:
@@ -302,47 +123,120 @@ public partial class Interpreter
             }
         }
 
-        // Operaciones unarias (ej. '!')
-        if (op == OperatorWords.NOT && right is bool rightBoolUnary)
-        {
-            return !rightBoolUnary;
-        }
-
-        throw new Exception($"Tipos incompatibles para operación '{op}': {left?.GetType().Name} y {right?.GetType().Name}");
+        throw new Exception($"Tipos incompatibles para operación '{op}': {DescribeType(left)} y {DescribeType(right)}");
     }
 
-    private bool TryConvertToDouble(object? value, out double result)
+    private static object EvaluateIntegerOperation(long left, string op, long right)
     {
-        result = 0;
-        if (value == null)
-            return false;
+        try
+        {
+            switch (op)
+            {
+                case OperatorWords.ADD:
+                    return NarrowInteger(checked(left + right));
+                case OperatorWords.SUBTRACT:
+                    return NarrowInteger(checked(left - right));
+                case OperatorWords.MULTIPLY:
+                    return NarrowInteger(checked(left * right));
+                case OperatorWords.DIVIDE:
+                    return right != 0 ? NarrowInteger(left / right) : throw new Exception("División por cero");
+                case OperatorWords.MODULO:
+                    return right != 0 ? NarrowInteger(left % right) : throw new Exception("Módulo por cero");
+                case OperatorWords.EQUAL:
+                    return left == right;
+                case OperatorWords.NOT_EQUAL:
+                    return left != right;
+                case OperatorWords.LESS:
+                    return left < right;
+                case OperatorWords.GREATER:
+                    return left > right;
+                case OperatorWords.LESS_EQUAL:
+                    return left <= right;
+                case OperatorWords.GREATER_EQUAL:
+                    return left >= right;
+                default:
+                    throw new Exception($"Operación '{op}' no reconocida para números");
+            }
+        }
+        catch (OverflowException)
+        {
+            throw new Exception($"Desbordamiento aritmético en la operación '{op}'");
+        }
+    }
 
-        if (value is int intVal)
-        {
-            result = intVal;
-            return true;
-        }
-        if (value is float floatVal)
-        {
-            result = floatVal;
-            return true;
-        }
-        if (value is double doubleVal)
-        {
-            result = doubleVal;
-            return true;
-        }
-        if (value is string stringVal)
-        {
-            return double.TryParse(stringVal, out result);
-        }
+    private static object NarrowInteger(long value)
+    {
+        return value is >= int.MinValue and <= int.MaxValue ? (int)value : value;
+    }
 
-        return false;
+    private static bool IsInteger(object? value) => value is int or long;
+
+    private static bool TryConvertToDouble(object? value, out double result)
+    {
+        switch (value)
+        {
+            case int i:
+                result = i;
+                return true;
+            case long l:
+                result = l;
+                return true;
+            case float f:
+                result = f;
+                return true;
+            case double d:
+                result = d;
+                return true;
+            case string s:
+                return double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out result);
+            default:
+                result = 0;
+                return false;
+        }
+    }
+
+    // Formato de los valores al mostrarlos o concatenarlos. Usa siempre punto decimal (InvariantCulture)
+    // para que coincida con la sintaxis de los literales, sin importar la configuración regional del equipo,
+    // y muestra los booleanos y las colecciones con la notación del lenguaje.
+    internal static string FormatValue(object? value)
+    {
+        switch (value)
+        {
+            case null:
+                return LiteralWords.NULL;
+            case string s:
+                return s;
+            case bool b:
+                return b ? LiteralWords.TRUE : LiteralWords.FALSE;
+            case System.Collections.IList list:
+                var parts = new List<string>(list.Count);
+                foreach (var item in list)
+                    parts.Add(FormatValue(item));
+                return "[" + string.Join(", ", parts) + "]";
+            case IFormattable formattable:
+                return formattable.ToString(null, CultureInfo.InvariantCulture);
+            default:
+                return value.ToString() ?? string.Empty;
+        }
+    }
+
+    private static string DescribeType(object? value)
+    {
+        return value switch
+        {
+            null => LiteralWords.NULL,
+            int or long => TypeWords.GEAR,
+            double or float => TypeWords.BANKAI,
+            bool => TypeWords.SHIN,
+            string => TypeWords.GRIMOIRE,
+            System.Collections.IList => TypeWords.CHAINSAW,
+            _ => value.GetType().Name
+        };
     }
 
     private object? ExecuteUnaryExpression(Node node)
     {
-        // UnaryExpression should have 2 children: Operator and Operand
+        // UnaryExpression tiene 2 hijos: Operator y operando
         if (node.Children.Count < 2)
             throw new Exception("UnaryExpression mal formada");
 
@@ -355,32 +249,28 @@ public partial class Interpreter
         var op = operatorNode.Children[0].Type;
         var operand = ExecuteNode(operandNode);
 
-        // Handle unary operators
         switch (op)
         {
             case OperatorWords.SUBTRACT:
-                // Unary negation for numeric types
                 if (operand is int intVal)
-                    return -intVal;
+                    return intVal == int.MinValue ? -(long)intVal : -intVal;
                 if (operand is long longVal)
                     return -longVal;
                 if (operand is float floatVal)
                     return -floatVal;
                 if (operand is double doubleVal)
                     return -doubleVal;
-                throw new Exception($"Operador unario '-' no soportado para tipo {operand?.GetType().Name}");
+                throw new Exception($"Operador unario '-' no soportado para tipo {DescribeType(operand)}");
 
             case OperatorWords.NOT:
-                // Logical NOT for boolean
                 if (operand is bool boolVal)
                     return !boolVal;
-                throw new Exception($"Operador unario '!' no soportado para tipo {operand?.GetType().Name}");
+                throw new Exception($"Operador unario '!' no soportado para tipo {DescribeType(operand)}");
 
             case OperatorWords.ADD:
-                // Unary plus (identity operation)
                 if (operand is int || operand is long || operand is float || operand is double)
                     return operand;
-                throw new Exception($"Operador unario '+' no soportado para tipo {operand?.GetType().Name}");
+                throw new Exception($"Operador unario '+' no soportado para tipo {DescribeType(operand)}");
 
             default:
                 throw new Exception($"Operador unario '{op}' no reconocido");
@@ -402,14 +292,6 @@ public partial class Interpreter
         if (value is System.Collections.ICollection collection)
             return collection.Count;
 
-        if (value is System.Collections.IEnumerable enumerable)
-        {
-            int count = 0;
-            foreach (var _ in enumerable)
-                count++;
-            return count;
-        }
-
-        throw new Exception($"length no soportado para tipo {value.GetType().Name}");
+        throw new Exception($"length no soportado para tipo {DescribeType(value)}");
     }
 }

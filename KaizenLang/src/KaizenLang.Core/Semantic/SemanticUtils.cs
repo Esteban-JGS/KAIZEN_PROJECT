@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace ParadigmasLang;
+namespace KaizenLang.Core;
 
 public static class SemanticUtils
 {
@@ -36,6 +36,17 @@ public static class SemanticUtils
         return idNode.Children.FirstOrDefault()?.Value?.ToString() ?? idNode.Children.FirstOrDefault()?.Type;
     }
 
+    // Agrega a 'found' todos los nodos del subárbol con el tipo indicado.
+    public static void CollectNodes(Node? node, string type, List<Node> found)
+    {
+        if (node == null)
+            return;
+        if (node.Type == type)
+            found.Add(node);
+        foreach (var child in node.Children)
+            CollectNodes(child, type, found);
+    }
+
     public static bool IsSymbolDefined(IEnumerable<SymbolTable> scopes, string name)
     {
         foreach (var scope in scopes)
@@ -63,5 +74,32 @@ public static class SemanticUtils
             return true;
 
         return string.Equals(normalized, TypeWords.GRIMOIRE, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Reglas de asignación compartidas por declaraciones y asignaciones:
+    // mismo tipo, null hacia tipos que lo admiten, y ensanchamiento numérico gear -> shikai -> bankai.
+    public static bool CanAssign(string targetType, string sourceType)
+    {
+        if (IsNullLiteralType(sourceType))
+            return IsNullLiteralType(targetType) || SupportsNullAssignment(targetType);
+
+        if (string.Equals(targetType, sourceType, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var targetRank = NumericRank(targetType);
+        var sourceRank = NumericRank(sourceType);
+        return sourceRank > 0 && targetRank >= sourceRank;
+    }
+
+    // 0 si no es numérico; si no, el orden de ensanchamiento gear (1) < shikai (2) < bankai (3).
+    public static int NumericRank(string? typeName)
+    {
+        if (string.Equals(typeName, TypeWords.GEAR, StringComparison.OrdinalIgnoreCase))
+            return 1;
+        if (string.Equals(typeName, TypeWords.SHIKAI, StringComparison.OrdinalIgnoreCase))
+            return 2;
+        if (string.Equals(typeName, TypeWords.BANKAI, StringComparison.OrdinalIgnoreCase))
+            return 3;
+        return 0;
     }
 }

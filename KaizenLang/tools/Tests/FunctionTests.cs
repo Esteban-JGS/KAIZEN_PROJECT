@@ -1,66 +1,42 @@
 using System;
-using System.IO;
-using Xunit;
-using ParadigmasLang.Logging;
-using ParadigmasLang;
+using KaizenLang.Core;
 using KaizenLang.UI.Services;
+using Xunit;
 
-namespace KaizenLang.Tests
+namespace KaizenLang.Tests;
+
+public class FunctionTests
 {
-    public class FunctionTests
+    [Fact]
+    public void FunctionExecution_LogsAndResult()
     {
-        [Fact]
-        public void FunctionExecution_LogsAndResult()
-        {
-            // Arrange: set debug logging so logger prints DBG messages
-            Environment.SetEnvironmentVariable("PARADIGMAS_LOG_LEVEL", "Debug");
-
-            var code = @"void saludar() ying
+        var code = @"void saludar() ying
     output(""¡Hola desde una función!"");
 yang
 
 saludar();
 
-integer sumar(integer a, integer b) ying
+gear sumar(gear a, gear b) ying
     return a + b;
 yang
 
-integer resultado = sumar(5, 3);
+gear resultado = sumar(5, 3);
 output(""El resultado de la suma es: "" + resultado);
 ";
 
-            // Capture console output
-            var sw = new StringWriter();
-            var oldOut = Console.Out;
-            Console.SetOut(sw);
+        var cs = new CompilationService();
+        var res = cs.CompileCode(code);
+        Assert.True(res.IsSuccessful, "Compilation should succeed");
 
-            try
-            {
-                // Use CompilationService to compile
-                var cs = new CompilationService();
-                var res = cs.CompileCode(code);
-                Assert.True(res.IsSuccessful, "Compilation should succeed");
+        // VerboseMode hace que el intérprete agregue las trazas [DBG] a su propia salida.
+        // Se verifica esa lista en vez de Console, que es global y la comparten tests en paralelo.
+        var interpreter = new Interpreter { VerboseMode = true };
+        var programOutputs = interpreter.Execute(res.AST!);
+        var joined = string.Join("\n", programOutputs);
 
-                // Execute interpreter and capture returned program outputs
-                var interpreter = new Interpreter();
-                var programOutputs = interpreter.Execute(res.AST);
-
-                // Examine captured console logs (debug/info messages)
-                var consoleOutput = sw.ToString();
-                // Debug logs should show function invocation
-                Assert.Contains("Invoking function 'saludar'", consoleOutput);
-                Assert.Contains("Invoking function 'sumar'", consoleOutput);
-
-                // Program outputs are returned by the interpreter as a list
-                var joinedProgramOutput = string.Join("\n", programOutputs);
-                Assert.Contains("¡Hola desde una función!", joinedProgramOutput);
-                Assert.Contains("El resultado de la suma es: 8", joinedProgramOutput);
-            }
-            finally
-            {
-                Console.SetOut(oldOut);
-                Environment.SetEnvironmentVariable("PARADIGMAS_LOG_LEVEL", null);
-            }
-        }
+        Assert.Contains("Invoking function 'saludar'", joined);
+        Assert.Contains("Invoking function 'sumar'", joined);
+        Assert.Contains("¡Hola desde una función!", joined);
+        Assert.Contains("El resultado de la suma es: 8", joined);
     }
 }

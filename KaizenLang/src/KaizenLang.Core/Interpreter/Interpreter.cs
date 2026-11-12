@@ -1,6 +1,6 @@
 using System.Linq;
 
-namespace ParadigmasLang;
+namespace KaizenLang.Core;
 
 public partial class Interpreter
 {
@@ -153,7 +153,7 @@ public partial class Interpreter
                 if (int.TryParse(token, out var i))
                     return i;
                 break;
-            case TypeWords.SHINKAI:
+            case TypeWords.SHIKAI:
             case TypeWords.BANKAI:
                 if (double.TryParse(token, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var d))
                     return d;
@@ -223,7 +223,7 @@ public partial class Interpreter
                     }
                     break;
 
-                case TypeWords.SHINKAI:
+                case TypeWords.SHIKAI:
                 case TypeWords.BANKAI:
                     if (value is double || value is float)
                         return Convert.ToDouble(value, System.Globalization.CultureInfo.InvariantCulture);
@@ -304,6 +304,7 @@ public partial class Interpreter
     public List<string> Execute(Node root)
     {
         output.Clear();
+        executedSteps = 0;
         try
         {
             ExecuteNode(root);
@@ -315,8 +316,16 @@ public partial class Interpreter
         return output;
     }
 
+    // Límite opcional de nodos evaluados por ejecución (0 = sin límite). Lo usa el playground web, donde no hay
+    // un timeout como el del IDE y un programa con bucles anidados podría congelar la pestaña del navegador.
+    public long MaxExecutionSteps { get; set; }
+    private long executedSteps;
+
     private object? ExecuteNode(Node node)
     {
+        if (MaxExecutionSteps > 0 && ++executedSteps > MaxExecutionSteps)
+            throw new Exception($"Se alcanzó el límite de {MaxExecutionSteps} pasos de ejecución (¿bucle muy largo o infinito?)");
+
         switch (node.Type)
         {
             case "Program":
@@ -347,6 +356,9 @@ public partial class Interpreter
 
             case "While":
                 return ExecuteWhile(node);
+
+            case "DoWhile":
+                return ExecuteDoWhile(node);
 
             case "For":
                 return ExecuteFor(node);

@@ -1,4 +1,4 @@
-namespace ParadigmasLang;
+namespace KaizenLang.Core;
 
 public class Node
 {
@@ -20,7 +20,7 @@ public class Node
     {
         Type = type;
     }
-       public Node(string type, object? value) : this(type)
+    public Node(string type, object? value) : this(type)
     {
         Value = value;
     }
@@ -77,29 +77,34 @@ public class Node
         return result;
     }
 
-    // Método para verificar si el nodo tiene errores
+    // Tipo de nodo con el que el parser marca un error de sintaxis; su primer hijo guarda el mensaje.
+    public const string ErrorType = "Error";
+
+    // Se compara el tipo exacto: los literales e identificadores también guardan su texto en Type,
+    // así que buscar "Error" como subcadena marcaba como error un output("Error") o una variable numErrores.
     public bool HasErrors()
     {
-        return Type.Contains("Error") || Type.Contains("Invalid") ||
-               Children.Any(c => c.HasErrors());
+        return Type == ErrorType || Children.Any(c => c.HasErrors());
     }
 
-    // Método para obtener todos los errores del árbol
     public List<string> GetAllErrors()
     {
         var collected = new List<string>();
+        CollectErrors(collected);
+        return collected;
+    }
 
-        if (Type.Contains("Error") || Type.Contains("Invalid"))
+    private void CollectErrors(List<string> collected)
+    {
+        if (Type == ErrorType)
         {
-            if (Children.Count > 0 && !string.IsNullOrEmpty(Children[0].Type))
-                collected.Add(Children[0].Type);
-            else
-                collected.Add($"Error en nodo: {Type}");
+            collected.Add(Children.Count > 0 && !string.IsNullOrEmpty(Children[0].Type)
+                ? Children[0].Type
+                : "Error de sintaxis");
+            return;
         }
 
         foreach (var child in Children)
-            collected.AddRange(child.GetAllErrors());
-
-        return collected;
+            child.CollectErrors(collected);
     }
 }

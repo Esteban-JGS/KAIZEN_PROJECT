@@ -1,4 +1,4 @@
-namespace ParadigmasLang;
+namespace KaizenLang.Core;
 
 public partial class Interpreter
 {
@@ -21,6 +21,14 @@ public partial class Interpreter
         return null;
     }
 
+    // Tope de iteraciones por bucle para que un bucle infinito no congele el IDE (igual para while, for y do-while).
+    public const int MaxLoopIterations = 10000;
+
+    private void WarnLoopLimit(string loopName)
+    {
+        output.Add($"Advertencia: bucle {loopName} detenido después de {MaxLoopIterations} iteraciones");
+    }
+
     private object? ExecuteWhile(Node node)
     {
         if (node.Children.Count >= 2)
@@ -29,22 +37,39 @@ public partial class Interpreter
             var bodyNode = node.Children[1];
 
             int iterations = 0;
-            const int maxIterations = 10000; // Prevenir bucles infinitos
-
-            while (iterations < maxIterations)
+            while (Convert.ToBoolean(ExecuteNode(conditionNode)))
             {
-                var condition = ExecuteNode(conditionNode);
-                if (!Convert.ToBoolean(condition))
+                if (iterations++ >= MaxLoopIterations)
+                {
+                    WarnLoopLimit(ReservedWords.WHILE);
                     break;
-
+                }
                 ExecuteNode(bodyNode);
-                iterations++;
             }
+        }
+        return null;
+    }
 
-            if (iterations >= maxIterations)
+    // do ying ... yang while (cond); ejecuta el cuerpo al menos una vez. Antes no tenía caso propio en
+    // ExecuteNode y caía en el default, que corría el cuerpo una sola vez sin volver a evaluar la condición.
+    private object? ExecuteDoWhile(Node node)
+    {
+        if (node.Children.Count >= 2)
+        {
+            var bodyNode = node.Children[0];
+            var conditionNode = node.Children[1];
+
+            int iterations = 0;
+            do
             {
-                output.Add("Advertencia: Bucle while detenido después de 1000 iteraciones");
+                if (iterations++ >= MaxLoopIterations)
+                {
+                    WarnLoopLimit($"{ReservedWords.DO}-{ReservedWords.WHILE}");
+                    break;
+                }
+                ExecuteNode(bodyNode);
             }
+            while (Convert.ToBoolean(ExecuteNode(conditionNode)));
         }
         return null;
     }
@@ -61,24 +86,15 @@ public partial class Interpreter
                 ExecuteNode(node.Children[0]);
 
                 int iterations = 0;
-                const int maxIterations = 1000;
-
-                while (iterations < maxIterations)
+                while (Convert.ToBoolean(ExecuteNode(node.Children[1])))
                 {
-                    var condition = ExecuteNode(node.Children[1]);
-                    if (!Convert.ToBoolean(condition))
+                    if (iterations++ >= MaxLoopIterations)
+                    {
+                        WarnLoopLimit(ReservedWords.FOR);
                         break;
-
-                    if (node.Children.Count > 3)
-                        ExecuteNode(node.Children[3]);
-
+                    }
+                    ExecuteNode(node.Children[3]);
                     ExecuteNode(node.Children[2]);
-                    iterations++;
-                }
-
-                if (iterations >= maxIterations)
-                {
-                    output.Add("Advertencia: Bucle for detenido después de 1000 iteraciones");
                 }
             }
             finally
@@ -107,9 +123,9 @@ public partial class Interpreter
 
     private object? ExecuteFunctionCall(Node node)
     {
-    var fnameNode = node.FindChild("FunctionName");
-    string fname = SemanticUtils.ExtractIdentifierName(fnameNode) ?? string.Empty;
-    var callArgsNode = node.FindChild("Arguments");
+        var fnameNode = node.FindChild("FunctionName");
+        string fname = SemanticUtils.ExtractIdentifierName(fnameNode) ?? string.Empty;
+        var callArgsNode = node.FindChild("Arguments");
 
         if (string.Equals(fname, ReservedWords.OUTPUT, System.StringComparison.OrdinalIgnoreCase))
         {
@@ -118,8 +134,7 @@ public partial class Interpreter
             {
                 foreach (var arg in callArgsNode.Children)
                 {
-                    var val = ExecuteNode(arg);
-                    outputValues.Add(val?.ToString() ?? "null");
+                    outputValues.Add(FormatValue(ExecuteNode(arg)));
                 }
             }
             output.Add(string.Join(" ", outputValues));
@@ -181,6 +196,16 @@ public partial class Interpreter
             if ((currentCallDepth + 1) > maxCallDepth)
                 throw new Exception($"Se excedió la profundidad máxima de recursión permitida ({maxCallDepth}).");
 
+            // Los argumentos se evalúan en el alcance de quien llama y antes de crear el de la función.
+            // Antes se evaluaban ya dentro del nuevo alcance: en f(b, a) con parámetros (a, b), el segundo
+            // argumento leía el parámetro 'a' recién asignado en vez de la variable 'a' de quien llama.
+            var argValues = new List<object?>();
+            if (callArgsNode != null)
+            {
+                foreach (var argNode in callArgsNode.Children)
+                    argValues.Add(ExecuteNode(argNode));
+            }
+
             currentCallDepth++;
             var oldScope = currentScope;
             try
@@ -188,100 +213,39 @@ public partial class Interpreter
                 if (VerboseMode)
                 {
                     output.Add($"[DBG] Invoking function '{fname}'");
-                    ParadigmasLang.Logging.Logger.Debug($"Invoking function '{fname}'");
+                    KaizenLang.Core.Logging.Logger.Debug($"Invoking function '{fname}'");
                 }
-                currentScope = new SymbolTable(oldScope);
 
-                if (VerboseMode)
-                {
-                    output.Add($"[DBG] Bound new scope for function '{fname}'");
-                    ParadigmasLang.Logging.Logger.Debug($"Bound new scope for function '{fname}'");
-                }
+                // Alcance léxico: la función ve sus parámetros y las variables globales, no las locales de quien llama.
+                currentScope = new SymbolTable(globalScope);
 
                 var paramsNode = fnNode.FindChild("Parameters");
-                if (paramsNode != null && callArgsNode != null)
+                if (paramsNode != null)
                 {
-                    var argsNode = callArgsNode;
                     for (int i = 0; i < paramsNode.Children.Count; i++)
                     {
                         var p = paramsNode.Children[i];
-                        var paramId = p.FindChild("Identifier");
-                        string paramName = string.Empty;
-                        if (paramId != null)
+                        var paramName = SemanticUtils.ExtractIdentifierName(p.FindChild("Identifier"));
+                        if (string.IsNullOrEmpty(paramName))
+                            continue;
+
+                        var declaredType = p.Children.Count > 0 ? ExtractTypeInfo(p.Children[0]).fullType : string.Empty;
+                        var argValue = i < argValues.Count ? argValues[i] : null;
+                        var coercedValue = CoerceValueToDeclaredType(argValue, declaredType);
+
+                        currentScope.DeclareVariable(paramName, declaredType, 0);
+                        currentScope.SetVariableValue(paramName, coercedValue);
+                        if (VerboseMode)
                         {
-                            if (paramId.Children.Count > 0)
-                                paramName = paramId.Children[0].Type;
-                            else
-                                paramName = paramId.Type;
-                        }
-
-                        object? argValue = null;
-                        if (argsNode.Children.Count > i)
-                        {
-                            argValue = ExecuteNode(argsNode.Children[i]);
-                        }
-
-                        if (!string.IsNullOrEmpty(paramName))
-                        {
-                            string declaredType = string.Empty;
-                            string primitiveParamType = string.Empty;
-                            if (p.Children.Count > 0)
-                            {
-                                var typeNode = p.Children[0];
-                                var typeInfo = ExtractTypeInfo(typeNode);
-                                declaredType = !string.IsNullOrEmpty(typeInfo.fullType) ? typeInfo.fullType : (typeNode.Type ?? string.Empty);
-                                primitiveParamType = !string.IsNullOrEmpty(typeInfo.primitiveType) ? typeInfo.primitiveType : declaredType;
-                            }
-
-                            object? coercedValue = argValue;
-                            try
-                            {
-                                if (!string.IsNullOrEmpty(primitiveParamType) && argValue != null)
-                                {
-                                    var declaredTypeLower = primitiveParamType.ToLowerInvariant();
-                                    switch (declaredTypeLower)
-                                    {
-                                        case TypeWords.GEAR:
-                                            coercedValue = Convert.ToInt32(argValue);
-                                            break;
-                                        case TypeWords.SHINKAI:
-                                        case TypeWords.BANKAI:
-                                        case "real":
-                                            coercedValue = Convert.ToDouble(argValue);
-                                            break;
-                                        case TypeWords.GRIMOIRE:
-                                        case "texto":
-                                            coercedValue = Convert.ToString(argValue);
-                                            break;
-                                        case TypeWords.SHIN:
-                                        case "boolean":
-                                            coercedValue = Convert.ToBoolean(argValue);
-                                            break;
-                                        default:
-                                            break;
-                                    }
-                                }
-                            }
-                            catch
-                            {
-                                if (VerboseMode)
-                                    output.Add($"Advertencia: no se pudo convertir el argumento para el parámetro '{paramName}' al tipo '{declaredType}'. Usando valor tal cual.");
-                            }
-
-                            currentScope.DeclareVariable(paramName, declaredType ?? string.Empty, 0);
-                            currentScope.SetVariableValue(paramName, coercedValue);
-                            if (VerboseMode)
-                            {
-                                output.Add($"[DBG] Param '{paramName}' = {coercedValue?.ToString() ?? "null"} (declared: {declaredType})");
-                                ParadigmasLang.Logging.Logger.Debug($"Param '{paramName}' = {coercedValue} (declared: {declaredType})");
-                            }
+                            output.Add($"[DBG] Param '{paramName}' = {FormatValue(coercedValue)} (declared: {declaredType})");
+                            KaizenLang.Core.Logging.Logger.Debug($"Param '{paramName}' = {coercedValue} (declared: {declaredType})");
                         }
                     }
                 }
                 if (VerboseMode)
                 {
                     output.Add($"[DBG] Executing body of '{fname}'");
-                    ParadigmasLang.Logging.Logger.Debug($"Executing body of '{fname}'");
+                    KaizenLang.Core.Logging.Logger.Debug($"Executing body of '{fname}'");
                 }
                 var body = fnNode.FindChild("Block") ?? fnNode.Children.FirstOrDefault(c => c.Type == "Body");
                 object? result = null;
@@ -296,14 +260,14 @@ public partial class Interpreter
                     if (VerboseMode)
                     {
                         output.Add($"[DBG] Function '{fname}' returned: {result}");
-                        ParadigmasLang.Logging.Logger.Debug($"Function '{fname}' returned: {result}");
+                        KaizenLang.Core.Logging.Logger.Debug($"Function '{fname}' returned: {result}");
                     }
                 }
 
                 if (VerboseMode)
                 {
                     output.Add($"[DBG] Finished invocation of '{fname}' (returning)");
-                    ParadigmasLang.Logging.Logger.Debug($"Finished invocation of '{fname}' (returning)");
+                    KaizenLang.Core.Logging.Logger.Debug($"Finished invocation of '{fname}' (returning)");
                 }
 
                 return result;
@@ -316,7 +280,7 @@ public partial class Interpreter
             }
         }
 
-        throw new Exception($"Function '{fname}' not found at runtime");
+        throw new Exception($"Función '{fname}' no definida");
     }
 
     private object? ExecuteReturn(Node node)

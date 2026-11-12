@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace ParadigmasLang;
+namespace KaizenLang.Core;
 
 public partial class Parser
 {
@@ -9,7 +9,7 @@ public partial class Parser
         var ifNode = new Node("If");
         pos++;
 
-        if (pos < tokens.Count && tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.PAREN_OPEN)
+        if (IsDelimiter(tokens, pos, DelimiterWords.PAREN_OPEN))
             pos++;
         else
             return ErrorNode("Se esperaba '(' después de 'if'.", pos);
@@ -17,13 +17,13 @@ public partial class Parser
         var condition = ParseExpression(tokens, ref pos);
         ifNode.Children.Add(condition);
 
-        if (pos < tokens.Count && tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.PAREN_CLOSE)
+        if (IsDelimiter(tokens, pos, DelimiterWords.PAREN_CLOSE))
             pos++;
         else
             return ErrorNode("Se esperaba ')' después de la condición del if.", pos);
 
         Node thenBranch;
-        if (pos < tokens.Count && tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.BLOCK_START)
+        if (IsDelimiter(tokens, pos, DelimiterWords.BLOCK_START))
         {
             pos++;
             thenBranch = ParseBlock(tokens, ref pos);
@@ -38,7 +38,7 @@ public partial class Parser
             }
             else
             {
-                return ErrorNode("Se esperaba un bloque '{...}' o una sentencia después de la condición del if.", pos);
+                return ErrorNode("Se esperaba un bloque 'ying ... yang' o una sentencia después de la condición del if.", pos);
             }
         }
         ifNode.Children.Add(thenBranch);
@@ -52,7 +52,7 @@ public partial class Parser
             {
                 elseBranch = ParseIf(tokens, ref pos);
             }
-            else if (pos < tokens.Count && tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.BLOCK_START)
+            else if (IsDelimiter(tokens, pos, DelimiterWords.BLOCK_START))
             {
                 pos++;
                 elseBranch = ParseBlock(tokens, ref pos);
@@ -67,7 +67,7 @@ public partial class Parser
                 }
                 else
                 {
-                    return ErrorNode("Se esperaba un bloque '{...}', 'if' o una sentencia después de 'else'.", pos);
+                    return ErrorNode("Se esperaba un bloque 'ying ... yang', 'if' o una sentencia después de 'else'.", pos);
                 }
             }
             ifNode.Children.Add(elseBranch);
@@ -78,7 +78,7 @@ public partial class Parser
     private Node ParseFor(List<Token> tokens, ref int pos)
     {
         pos++;
-        if (pos < tokens.Count && tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.PAREN_OPEN)
+        if (IsDelimiter(tokens, pos, DelimiterWords.PAREN_OPEN))
             pos++;
         else
             return ErrorNode("Se esperaba '(' después de 'for'.", pos);
@@ -89,7 +89,7 @@ public partial class Parser
             init = new Node("Empty");
         }
 
-        if (pos < tokens.Count && tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.SEMICOLON)
+        if (IsDelimiter(tokens, pos, DelimiterWords.SEMICOLON))
         {
             pos++;
         }
@@ -97,22 +97,22 @@ public partial class Parser
         {
             if (!(pos > 0 && tokens[pos - 1].Type == "DELIMITER" && tokens[pos - 1].Value == DelimiterWords.SEMICOLON))
             {
-                return ErrorNode("Se esperaba ';' después de la inicialización del for.", pos);
+                return ErrorAfterPrevious("Se esperaba ';' después de la inicialización del for.", pos);
             }
         }
         var condition = ParseExpression(tokens, ref pos);
-        if (pos < tokens.Count && tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.SEMICOLON)
+        if (IsDelimiter(tokens, pos, DelimiterWords.SEMICOLON))
             pos++;
         else
-            return ErrorNode("Se esperaba ';' después de la condición del for.", pos);
+            return ErrorAfterPrevious("Se esperaba ';' después de la condición del for.", pos);
         var increment = ParseExpression(tokens, ref pos);
-        if (pos < tokens.Count && tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.PAREN_CLOSE)
+        if (IsDelimiter(tokens, pos, DelimiterWords.PAREN_CLOSE))
             pos++;
         else
             return ErrorNode("Se esperaba ')' después de la expresión de incremento del for.", pos);
 
         Node body;
-        if (pos < tokens.Count && tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.BLOCK_START)
+        if (IsDelimiter(tokens, pos, DelimiterWords.BLOCK_START))
         {
             pos++;
             body = ParseBlock(tokens, ref pos);
@@ -133,18 +133,18 @@ public partial class Parser
     private Node ParseWhile(List<Token> tokens, ref int pos)
     {
         pos++;
-        if (tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.PAREN_OPEN)
+        if (IsDelimiter(tokens, pos, DelimiterWords.PAREN_OPEN))
             pos++;
         else
             return ErrorNode("Se esperaba '(' después de 'while'.", pos);
         var condition = ParseExpression(tokens, ref pos);
-        if (tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.PAREN_CLOSE)
+        if (IsDelimiter(tokens, pos, DelimiterWords.PAREN_CLOSE))
             pos++;
         else
             return ErrorNode("Se esperaba ')' después de la condición del while.", pos);
 
         Node body;
-        if (pos < tokens.Count && tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.BLOCK_START)
+        if (IsDelimiter(tokens, pos, DelimiterWords.BLOCK_START))
         {
             pos++;
             body = ParseBlock(tokens, ref pos);
@@ -161,7 +161,7 @@ public partial class Parser
     {
         pos++;
         Node body;
-        if (pos < tokens.Count && tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.BLOCK_START)
+        if (IsDelimiter(tokens, pos, DelimiterWords.BLOCK_START))
         {
             pos++;
             body = ParseBlock(tokens, ref pos);
@@ -174,19 +174,19 @@ public partial class Parser
         if (Match(tokens, pos, "RESERVED", ReservedWords.WHILE))
         {
             pos++;
-            if (tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.PAREN_OPEN)
+            if (IsDelimiter(tokens, pos, DelimiterWords.PAREN_OPEN))
                 pos++;
             else
                 return ErrorNode("Se esperaba '(' después de 'while' en un do-while.", pos);
             var condition = ParseExpression(tokens, ref pos);
-            if (tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.PAREN_CLOSE)
+            if (IsDelimiter(tokens, pos, DelimiterWords.PAREN_CLOSE))
                 pos++;
             else
                 return ErrorNode("Se esperaba ')' después de la condición del do-while.", pos);
-            if (tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.SEMICOLON)
+            if (IsDelimiter(tokens, pos, DelimiterWords.SEMICOLON))
                 pos++;
             else
-                return ErrorNode("Se esperaba ';' después del do-while.", pos);
+                return ErrorAfterPrevious("Se esperaba ';' después del do-while.", pos);
             return new Node("DoWhile", new List<Node> { body, condition });
         }
         return ErrorNode("Se esperaba 'while' después del bloque de un do-while.", pos);
@@ -194,71 +194,49 @@ public partial class Parser
 
     private Node ParseFunction(List<Token> tokens, ref int pos)
     {
-        var typeNode = new Node(tokens[pos].Value);
+        var typeNode = new Node(tokens[pos].Value) { Line = tokens[pos].Line, Column = tokens[pos].Column };
         pos++;
         var nameNode = new Node("Identifier", new List<Node> { new Node(tokens[pos].Value) });
         pos++;
 
-        if (tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.PAREN_OPEN)
+        if (IsDelimiter(tokens, pos, DelimiterWords.PAREN_OPEN))
             pos++;
         else
             return ErrorNode("Se esperaba '(' después del nombre de la función.", pos);
         var parameters = ParseParams(tokens, ref pos);
-        if (tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.PAREN_CLOSE)
+        if (IsDelimiter(tokens, pos, DelimiterWords.PAREN_CLOSE))
             pos++;
         else
             return ErrorNode("Se esperaba ')' después de los parámetros de la función.", pos);
 
         Node body;
-        if (pos < tokens.Count && tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.BLOCK_START)
+        if (IsDelimiter(tokens, pos, DelimiterWords.BLOCK_START))
         {
             pos++;
             body = ParseBlock(tokens, ref pos);
         }
         else
         {
-            return ErrorNode("Se esperaba un bloque '{...}' para el cuerpo de la función.", pos);
+            return ErrorNode("Se esperaba un bloque 'ying ... yang' para el cuerpo de la función.", pos);
         }
 
-        return new Node("Function", new List<Node> { typeNode, nameNode, parameters, body });
+        return new Node("Function", new List<Node> { typeNode, nameNode, parameters, body }) { Line = typeNode.Line, Column = typeNode.Column };
     }
 
     private Node ParseBlock(List<Token> tokens, ref int pos)
     {
         var blockNode = new Node("Block");
 
-        while (pos < tokens.Count && !(tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.BLOCK_END))
+        while (pos < tokens.Count && !IsDelimiter(tokens, pos, DelimiterWords.BLOCK_END))
         {
-            var stmt = ParseStatement(tokens, ref pos);
-            if (stmt != null)
-                blockNode.Children.Add(stmt);
-            else
-            {
-                blockNode.Children.Add(ErrorNode($"Token inesperado '{tokens[pos].Value}' dentro de un bloque.", pos));
-                pos++;
-            }
+            blockNode.Children.Add(ParseStatementAdvancing(tokens, ref pos, "Token inesperado '{0}' dentro de un bloque."));
         }
 
-        if (pos >= tokens.Count)
-        {
-            return blockNode;
-        }
-
-        if (tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.BLOCK_END)
-        {
+        // El bucle solo termina en 'yang' o al final del archivo; antes un bloque sin cerrar pasaba sin error.
+        if (IsDelimiter(tokens, pos, DelimiterWords.BLOCK_END))
             pos++;
-        }
         else
-        {
-            if (tokens[pos].Type == "TYPE" || IsFunctionDeclaration(tokens, pos))
-            {
-            }
-            else
-            {
-                blockNode.Children.Add(ErrorNode($"Bloque no cerrado. Se esperaba '{DelimiterWords.BLOCK_END}'.", pos));
-                return blockNode;
-            }
-        }
+            blockNode.Children.Add(ErrorNode($"Bloque no cerrado. Se esperaba '{DelimiterWords.BLOCK_END}'.", pos));
 
         return blockNode;
     }

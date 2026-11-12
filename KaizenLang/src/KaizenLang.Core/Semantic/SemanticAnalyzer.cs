@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace ParadigmasLang;
+namespace KaizenLang.Core;
 
 public class SemanticAnalyzer
 {
@@ -24,21 +24,25 @@ public class SemanticAnalyzer
 
     public List<string> AnalyzeProgram(Node ast)
     {
-    diagnostics.Clear();
+        diagnostics.Clear();
         scopes.Clear();
         functions.Clear();
-    PushScope();
+        PushScope();
         foreach (var kv in builtins)
         {
             functions[kv.Key] = new FunctionSignature { Name = kv.Key, Arity = kv.Value, IsBuiltin = true };
         }
-    if (functions.ContainsKey(ReservedWords.INPUT)) functions[ReservedWords.INPUT].ReturnType = TypeWords.GRIMOIRE;
-    if (functions.ContainsKey("length")) functions["length"].ReturnType = TypeWords.GEAR;
-    if (functions.ContainsKey(ReservedWords.OUTPUT)) functions[ReservedWords.OUTPUT].ReturnType = ReservedWords.VOID;
-        if (functions.ContainsKey("print")) functions["print"].ReturnType = "void";
-    typeResolver = new TypeResolver(scopes, functions, builtins, diagnostics);
-    declarationChecker = new DeclarationChecker(scopes, functions, builtins, typeResolver, diagnostics, VisitNode);
-    collectionValidator = new CollectionValidator(typeResolver, diagnostics);
+        if (functions.ContainsKey(ReservedWords.INPUT))
+            functions[ReservedWords.INPUT].ReturnType = TypeWords.GRIMOIRE;
+        if (functions.ContainsKey("length"))
+            functions["length"].ReturnType = TypeWords.GEAR;
+        if (functions.ContainsKey(ReservedWords.OUTPUT))
+            functions[ReservedWords.OUTPUT].ReturnType = ReservedWords.VOID;
+        if (functions.ContainsKey("print"))
+            functions["print"].ReturnType = "void";
+        typeResolver = new TypeResolver(scopes, functions, builtins, diagnostics);
+        declarationChecker = new DeclarationChecker(scopes, functions, builtins, typeResolver, diagnostics, VisitNode);
+        collectionValidator = new CollectionValidator(typeResolver, diagnostics);
         foreach (var child in ast.Children)
         {
             VisitTopLevel(child);
@@ -49,14 +53,16 @@ public class SemanticAnalyzer
 
     private void ValidateAllIdentifiers(Node root)
     {
-        if (root == null) return;
+        if (root == null)
+            return;
         foreach (var child in root.Children)
             ValidateNodeWithScope(child);
     }
 
     private void ValidateNodeWithScope(Node node)
     {
-        if (node == null) return;
+        if (node == null)
+            return;
 
         if (string.Equals(node.Type, "Function", StringComparison.OrdinalIgnoreCase) || string.Equals(node.Type, "FunctionDeclaration", StringComparison.OrdinalIgnoreCase))
         {
@@ -69,9 +75,9 @@ public class SemanticAnalyzer
                     var id = p.FindChild("Identifier") ?? p.FindChild("IDENTIFIER");
                     var pname = SemanticUtils.ExtractIdentifierName(id) ?? id?.Type;
                     var typeNode = p.Children.Count > 0 ? p.Children[0] : null;
-                        var ptype = typeNode != null && typeNode.Children.Count>0 ? typeNode.Children[0].Type : typeNode?.Type ?? string.Empty;
-                        if (!string.IsNullOrEmpty(pname))
-                            scopes.Peek().DeclareVariable(pname, ptype, p.Line);
+                    var ptype = typeNode != null && typeNode.Children.Count > 0 ? typeNode.Children[0].Type : typeNode?.Type ?? string.Empty;
+                    if (!string.IsNullOrEmpty(pname))
+                        scopes.Peek().DeclareVariable(pname, ptype, p.Line);
                 }
             }
 
@@ -111,70 +117,65 @@ public class SemanticAnalyzer
         if (node == null)
             return;
 
-        if (string.Equals(node.Type, "If", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(node.Type, "While", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(node.Type, "For", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(node.Type, "DoWhile", StringComparison.OrdinalIgnoreCase))
-        {
-            foreach (var c in node.Children)
-                VisitNode(c);
-            return;
-        }
-
         switch (node.Type)
         {
+            // Bloques y for abren su propio alcance, igual que en el intérprete: la misma variable
+            // puede declararse en el if y en el else, o en dos for seguidos.
+            case "Block":
+            case "For":
+                PushScope();
+                try
+                {
+                    int start = 0;
+                    if (node.Type == "For" && node.Children.Count > 1)
+                    {
+                        // La inicialización se visita primero para que la condición vea la variable del bucle.
+                        CheckCondition(node.Children[1], ReservedWords.FOR, visitFirst: node.Children[0]);
+                        start = 1;
+                    }
+                    for (int i = start; i < node.Children.Count; i++)
+                        VisitNode(node.Children[i]);
+                }
+                finally
+                {
+                    PopScope();
+                }
+                break;
+            case "If":
+            case "While":
+                if (node.Children.Count > 0)
+                    CheckCondition(node.Children[0], node.Type == "If" ? ReservedWords.IF : ReservedWords.WHILE);
+                foreach (var c in node.Children)
+                    VisitNode(c);
+                break;
+            case "DoWhile":
+                foreach (var c in node.Children)
+                    VisitNode(c);
+                if (node.Children.Count > 1)
+                    CheckCondition(node.Children[1], $"{ReservedWords.DO}-{ReservedWords.WHILE}");
+                break;
+            case "Return":
+                if (declarationChecker?.InsideFunction == true)
+                    declarationChecker.CheckReturn(node);
+                else
+                    diagnostics.Report(node, "'return' solo puede usarse dentro de una función");
+                foreach (var c in node.Children)
+                    VisitNode(c);
+                break;
             case "VariableDeclaration":
                 declarationChecker?.RegisterVariable(node);
                 collectionValidator?.CheckCollectionInitializer(node);
                 break;
             case "Assignment":
-                var id = node.FindChild("Identifier") ?? node.FindChild("IDENTIFIER") ?? node.FindChild("IndexAccess");
-                var name = SemanticUtils.ExtractIdentifierName(id);
-                if (!string.IsNullOrEmpty(name) && !SemanticUtils.IsSymbolDefined(scopes, name))
-                    diagnostics.Report(node, $"Variable '{name}' not declarada");
-
-                var rhs = node.FindChild("Expression") ?? (node.Children.Count > 1 ? node.Children[1] : null);
-                if (rhs != null)
-                {
-                    // Navigate through Expression wrapper to find the actual expression node
-                    var rhsExpr = rhs;
-                    while (rhsExpr != null && rhsExpr.Type == "Expression" && rhsExpr.Children.Count > 0)
-                    {
-                        rhsExpr = rhsExpr.Children[0];
-                    }
-
-                    // Also check if there's an IndexAccess node in the expression tree
-                    if (rhsExpr != null && rhsExpr.Type != "IndexAccess")
-                    {
-                        var indexAccessNode = rhsExpr.FindChild("IndexAccess");
-                        if (indexAccessNode != null)
-                            rhsExpr = indexAccessNode;
-                    }
-
-                    var rhsType = typeResolver?.Resolve(rhsExpr);
-                    if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(rhsType))
-                    {
-                        foreach (var scope in scopes)
-                        {
-                            var si = scope.LookupVariable(name);
-                            if (si != null && !string.IsNullOrEmpty(si.Type))
-                            {
-                                if (!string.Equals(si.Type, rhsType, StringComparison.OrdinalIgnoreCase))
-                                {
-                        if (!CanAssign(si.Type, rhsType))
-                        diagnostics.Report(node, $"Tipos incompatibles para asignación: {si.Type} y {rhsType}");
-                                }
-                                break;
-                            }
-                        }
-                    }
-                }
+                CheckAssignment(node);
+                if (node.Children.Count > 1)
+                    VisitNode(node.Children[1]);
                 break;
             case "Identifier":
             case "IDENTIFIER":
                 var sname = SemanticUtils.ExtractIdentifierName(node);
                 if (!string.IsNullOrEmpty(sname) && !SemanticUtils.IsSymbolDefined(scopes, sname) && !functions.ContainsKey(sname))
-                    diagnostics.Report(node, $"Variable '{sname}' not declared");
+                    diagnostics.Report(node, $"Variable '{sname}' no declarada");
                 break;
             case "FunctionCall":
                 ValidateFunctionCall(node);
@@ -186,49 +187,87 @@ public class SemanticAnalyzer
         }
     }
 
+    // La condición de if/while/for/do-while debe ser shin cuando su tipo se puede inferir.
+    // En el for, la condición usa la variable de la inicialización, que se registra primero.
+    private void CheckCondition(Node condition, string statement, Node? visitFirst = null)
+    {
+        if (visitFirst != null)
+            VisitNode(visitFirst);
+
+        var type = typeResolver?.Resolve(condition);
+        if (!string.IsNullOrEmpty(type) && !string.Equals(type, TypeWords.SHIN, StringComparison.OrdinalIgnoreCase))
+            diagnostics.Report(condition, $"La condición del {statement} debe ser de tipo '{TypeWords.SHIN}', se encontró '{type}'");
+    }
+
+    // Asignación "destino = valor", donde el destino es una variable o un elemento (a[i], m[i][j]).
+    // Se compara el tipo del destino con el de la expresión completa del lado derecho; antes solo se miraba
+    // su primer operando, así que "x = x + 1.5" con x gear no se detectaba.
+    private void CheckAssignment(Node node)
+    {
+        var target = node.Children.Count > 0 ? node.Children[0] : null;
+        var value = node.Children.Count > 1 ? node.Children[1] : null;
+
+        var baseIdentifier = target;
+        while (baseIdentifier != null && baseIdentifier.Type == "IndexAccess" && baseIdentifier.Children.Count > 0)
+            baseIdentifier = baseIdentifier.Children[0];
+
+        var name = SemanticUtils.ExtractIdentifierName(baseIdentifier);
+        if (string.IsNullOrEmpty(name))
+            return;
+
+        if (!SemanticUtils.IsSymbolDefined(scopes, name))
+        {
+            diagnostics.Report(node, $"Variable '{name}' no declarada");
+            return;
+        }
+
+        var targetType = typeResolver?.Resolve(target);
+        var valueType = typeResolver?.Resolve(value);
+        if (!string.IsNullOrEmpty(targetType) && !string.IsNullOrEmpty(valueType) && !CanAssign(targetType, valueType))
+            diagnostics.Report(node, $"Tipos incompatibles para asignación: {targetType} y {valueType}");
+    }
+
     private void ValidateFunctionCall(Node fnCallNode)
     {
         var fnameNode = fnCallNode.FindChild("FunctionName");
-    var fname = SemanticUtils.ExtractIdentifierName(fnameNode) ?? fnameNode?.Children.FirstOrDefault()?.Type;
+        var fname = SemanticUtils.ExtractIdentifierName(fnameNode) ?? fnameNode?.Children.FirstOrDefault()?.Type;
 
         if (string.IsNullOrEmpty(fname))
         {
-            diagnostics.Report(fnCallNode, "Function call missing function name");
+            diagnostics.Report(fnCallNode, "Llamada a función sin nombre");
             return;
         }
 
         var argsNode = fnCallNode.FindChild("Arguments");
         int argCount = argsNode?.Children.Count ?? 0;
 
-        // If builtin, apply basic arity rules
         if (builtins.TryGetValue(fname, out var expected))
         {
-            if (expected >= 0)
-            {
-                // Accept either expected or expected+1 for input(prompt?) convenience when expected==0
-                if (expected == 0 && !(argCount == 0 || argCount == 1))
-                    diagnostics.Report(fnCallNode, $"Builtin '{fname}' expects 0 or 1 arguments, got {argCount}");
-                else if (expected > 0 && argCount != expected)
-                    diagnostics.Report(fnCallNode, $"Builtin '{fname}' expects {expected} arguments, got {argCount}");
-            }
+            // Aridad 0 en un builtin acepta un argumento opcional: input() o input("mensaje").
+            if (expected == 0 && argCount > 1)
+                diagnostics.Report(fnCallNode, $"La función '{fname}' espera 0 o 1 argumentos, recibió {argCount}");
+            else if (expected > 0 && argCount != expected)
+                diagnostics.Report(fnCallNode, $"La función '{fname}' espera {expected} argumentos, recibió {argCount}");
         }
         else if (functions.TryGetValue(fname, out var sig))
         {
             if (sig.Arity >= 0 && sig.Arity != argCount)
-                diagnostics.Report(fnCallNode, $"Function '{fname}' expects {sig.Arity} arguments, got {argCount}");
+                diagnostics.Report(fnCallNode, $"La función '{fname}' espera {sig.Arity} argumentos, recibió {argCount}");
         }
         else
         {
-            diagnostics.Report(fnCallNode, $"Function '{fname}' is not defined");
+            diagnostics.Report(fnCallNode, $"Función '{fname}' no definida");
         }
 
         if (argsNode != null)
         {
             foreach (var a in argsNode.Children)
+            {
                 VisitNode(a);
+                typeResolver?.Resolve(a); // valida tipos dentro del argumento (p. ej. comparaciones)
+            }
         }
     }
-
 
     private void PushScope()
     {
@@ -241,55 +280,30 @@ public class SemanticAnalyzer
             scopes.Pop();
     }
 
-    private string FormattedError(Node node, string message)
-    {
-        if (node == null)
-            return message;
-        return $"{message} (l{node.Line}:c{node.Column})";
-    }
+    private static bool CanAssign(string targetType, string sourceType) => SemanticUtils.CanAssign(targetType, sourceType);
 
-    private class SymbolInfo
-    {
-        public string Name { get; set; } = string.Empty;
-        public SymbolKind Kind { get; set; }
-        public string Type { get; set; } = string.Empty;
-        public bool IsInitialized { get; set; }
-    }
-
-    private enum SymbolKind { Variable, Function }
-    private bool CanAssign(string targetType, string sourceType)
-    {
-        if (SemanticUtils.IsNullLiteralType(sourceType))
-        {
-            if (SemanticUtils.IsNullLiteralType(targetType))
-                return true;
-            return SemanticUtils.SupportsNullAssignment(targetType);
-        }
-
-        if (string.Equals(targetType, sourceType, StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        if (string.Equals(sourceType, TypeWords.GEAR, StringComparison.OrdinalIgnoreCase))
-        {
-            if (string.Equals(targetType, TypeWords.SHINKAI, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(targetType, TypeWords.BANKAI, StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-
-        if (string.Equals(sourceType, TypeWords.SHINKAI, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(targetType, TypeWords.BANKAI, StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        return false;
-    }
     private void ValidateIdentifiersInExpression(Node? expr)
     {
-        if (expr == null) return;
+        if (expr == null)
+            return;
 
-        if (expr.Type == "IDENTIFIER" || expr.Type == "Identifier" || expr.Type == "Identifier" )
+        // Una declaración local (p. ej. dentro de una función) introduce su nombre en el alcance actual.
+        // Antes se recorría como si fuera un uso y daba "no declarada" en la misma línea de la declaración.
+        if (expr.Type == "VariableDeclaration")
+        {
+            for (int i = 2; i < expr.Children.Count; i++)
+                ValidateIdentifiersInExpression(expr.Children[i]);
+
+            var declared = SemanticUtils.ExtractIdentifierName(expr.FindChild("Identifier"));
+            if (!string.IsNullOrEmpty(declared) && scopes.Count > 0)
+                scopes.Peek().DeclareVariable(declared, string.Empty, expr.Line);
+            return;
+        }
+
+        if (expr.Type == "IDENTIFIER" || expr.Type == "Identifier")
         {
             var name = SemanticUtils.ExtractIdentifierName(expr);
-                if (!string.IsNullOrEmpty(name) && !SemanticUtils.IsSymbolDefined(scopes, name) && !functions.ContainsKey(name) && !builtins.ContainsKey(name))
+            if (!string.IsNullOrEmpty(name) && !SemanticUtils.IsSymbolDefined(scopes, name) && !functions.ContainsKey(name) && !builtins.ContainsKey(name))
             {
                 diagnostics.Report(expr, $"Variable '{name}' no declarada");
             }
@@ -300,7 +314,7 @@ public class SemanticAnalyzer
         {
             var fname = SemanticUtils.ExtractIdentifierName(expr.FindChild("FunctionName"));
             if (!string.IsNullOrEmpty(fname) && !functions.ContainsKey(fname) && !builtins.ContainsKey(fname))
-                diagnostics.Report(expr, $"Function '{fname}' no definida");
+                diagnostics.Report(expr, $"Función '{fname}' no definida");
 
             var args = expr.FindChild("Arguments");
             if (args != null)

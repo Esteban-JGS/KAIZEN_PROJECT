@@ -1,7 +1,14 @@
-namespace ParadigmasLang;
+namespace KaizenLang.Core;
 
 public partial class Parser
 {
+    private static bool IsCallStart(List<Token> tokens, int pos)
+    {
+        return pos + 1 < tokens.Count
+            && (tokens[pos].Type == "IDENTIFIER" || tokens[pos].Type == "RESERVED")
+            && IsDelimiter(tokens, pos + 1, DelimiterWords.PAREN_OPEN);
+    }
+
     private Node? ParseStatement(List<Token> tokens, ref int pos)
     {
         if (Match(tokens, pos, "RESERVED", ReservedWords.IF))
@@ -23,36 +30,36 @@ public partial class Parser
         if (IsAssignment(tokens, pos))
             return ParseAssignment(tokens, ref pos);
 
-        if (IsExpressionStatement(tokens, pos))
-            return ParseExpressionStatement(tokens, ref pos);
-
-        if (tokens.Count > pos && tokens[pos].Type == "TYPE")
+        // Un tipo que no va seguido de un nombre ("gear = 10;", "gear;") es una declaración incompleta.
+        if (pos < tokens.Count && tokens[pos].Type == "TYPE")
         {
-            if (pos + 1 < tokens.Count && tokens[pos + 1].Value == DelimiterWords.SEMICOLON)
-            {
-                var error = ErrorNode($"Declaración de variable incompleta. Falta el nombre de la variable.", pos);
-                pos += 2;
-                return error;
-            }
+            var error = ErrorNode($"Declaración incompleta: falta el nombre de la variable después de '{tokens[pos].Value}'.", pos + 1);
+            pos++;
+            return error;
         }
 
-    return null;
+        // Una llamada "nombre(" se parsea como sentencia aunque esté mal cerrada, para que el error
+        // señale el problema real (falta ')' o ';') en vez de "token inesperado" en el nombre.
+        if (IsExpressionStatement(tokens, pos) || IsCallStart(tokens, pos))
+            return ParseExpressionStatement(tokens, ref pos);
+
+        return null;
     }
     private Node ParseReturn(List<Token> tokens, ref int pos)
     {
-        var node = new Node("Return");
-    pos++;
+        var node = new Node("Return") { Line = tokens[pos].Line, Column = tokens[pos].Column };
+        pos++;
 
-        if (pos < tokens.Count && !(tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.SEMICOLON))
+        if (pos < tokens.Count && !(IsDelimiter(tokens, pos, DelimiterWords.SEMICOLON)))
         {
             var expr = ParseExpression(tokens, ref pos);
             node.Children.Add(expr);
         }
 
-        if (pos < tokens.Count && tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.SEMICOLON)
+        if (IsDelimiter(tokens, pos, DelimiterWords.SEMICOLON))
             pos++;
         else
-            return ErrorNode("Se esperaba ';' después de la sentencia return.", pos);
+            return MissingSemicolon(node, "Se esperaba ';' después de la sentencia return.", pos);
 
         return node;
     }
@@ -62,10 +69,10 @@ public partial class Parser
         var stmtNode = new Node("ExpressionStatement");
         stmtNode.Children.Add(exprNode);
 
-        if (pos < tokens.Count && tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.SEMICOLON)
+        if (IsDelimiter(tokens, pos, DelimiterWords.SEMICOLON))
             pos++;
         else
-            return ErrorNode("Se esperaba ';' después de la expresión.", pos);
+            return MissingSemicolon(stmtNode, "Se esperaba ';' después de la expresión.", pos);
 
         return stmtNode;
     }
@@ -75,15 +82,15 @@ public partial class Parser
     {
         var varToken = tokens[pos];
         var varNode = new Node("Identifier", new List<Node> { new Node(varToken.Value) }) { Line = varToken.Line, Column = varToken.Column };
-    pos++;
-    pos++;
+        pos++;
+        pos++;
         var valueNode = ParseExpression(tokens, ref pos);
         var assignmentNode = new Node("Assignment", new List<Node> { varNode, valueNode }) { Line = varNode.Line, Column = varNode.Column };
 
-        if (pos < tokens.Count && tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.SEMICOLON)
+        if (IsDelimiter(tokens, pos, DelimiterWords.SEMICOLON))
             pos++;
         else
-            return ErrorNode("Se esperaba ';' después de la asignación.", pos);
+            return MissingSemicolon(assignmentNode, "Se esperaba ';' después de la asignación.", pos);
 
         return assignmentNode;
     }
@@ -142,34 +149,25 @@ public partial class Parser
                 var valueNode = ParseExpression(tokens, ref pos);
                 declarationNode.Children.Add(new Node("Value", new List<Node> { valueNode }));
             }
-            else if (tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.SEMICOLON)
+            else if (IsDelimiter(tokens, pos, DelimiterWords.SEMICOLON))
             {
             }
             else
             {
-                var invalidNode = new Node { Type = "InvalidDeclaration" };
-                invalidNode.Children.Add(new Node
-                {
-                    Type = "Error",
-                    Children = { new Node { Type = $"Token inesperado '{tokens[pos].Value}' en declaración de variable." } }
-                });
+                var error = ErrorNode($"Token inesperado '{tokens[pos].Value}' en declaración de variable.", pos);
                 pos++;
-
-                return invalidNode;
+                return error;
             }
 
         }
 
-        if (pos < tokens.Count && tokens[pos].Type == "DELIMITER" && tokens[pos].Value == DelimiterWords.SEMICOLON)
+        if (IsDelimiter(tokens, pos, DelimiterWords.SEMICOLON))
         {
             pos++;
         }
         else
         {
-            string errorMessage = (pos >= tokens.Count) ?
-                "Se esperaba ';' al final de la declaración de variable." :
-                $"Token inesperado '{tokens[pos].Value}' al final de la declaración. Se esperaba ';'.";
-            return ErrorNode(errorMessage, pos);
+            return MissingSemicolon(declarationNode, "Se esperaba ';' al final de la declaración de variable.", pos);
         }
 
         return declarationNode;
