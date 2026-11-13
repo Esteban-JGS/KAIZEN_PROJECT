@@ -155,9 +155,7 @@ public partial class Interpreter
                     else
                         varName = firstArgNode.Type;
 
-                    var tokenLine = ReadNextInputToken(null);
-                    if (tokenLine == null)
-                        return null;
+                    var tokenLine = ReadInputOrFail(null);
 
                     var symbol = currentScope.LookupVariable(varName);
                     object? finalVal = tokenLine;
@@ -181,8 +179,7 @@ public partial class Interpreter
                 prompt = firstArg?.ToString();
             }
 
-            var token = ReadNextInputToken(prompt);
-            return token;
+            return ReadInputOrFail(prompt);
         }
 
         if (string.Equals(fname, "length", System.StringComparison.OrdinalIgnoreCase))

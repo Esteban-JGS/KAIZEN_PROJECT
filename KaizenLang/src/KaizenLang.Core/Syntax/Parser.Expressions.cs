@@ -34,7 +34,17 @@ public partial class Parser
 
     private Node ParseExpression(List<Token> tokens, ref int pos)
     {
-        return ParseExpressionWithPrecedence(tokens, ref pos, 0);
+        var tooDeep = EnterNesting(tokens, ref pos);
+        if (tooDeep != null)
+            return tooDeep;
+        try
+        {
+            return ParseExpressionWithPrecedence(tokens, ref pos, 0);
+        }
+        finally
+        {
+            parseDepth--;
+        }
     }
 
     private Node ParseExpressionWithPrecedence(List<Token> tokens, ref int pos, int minPrecedence)
@@ -100,8 +110,21 @@ public partial class Parser
                 unaryNode.Children.Add(opNode);
                 pos++;
 
-                var operand = ParseUnaryOrPrimary(tokens, ref pos);
-                unaryNode.Children.Add(operand);
+                // "- - - ... x" también es recursión del parser.
+                var tooDeep = EnterNesting(tokens, ref pos);
+                if (tooDeep != null)
+                {
+                    unaryNode.Children.Add(tooDeep);
+                    return unaryNode;
+                }
+                try
+                {
+                    unaryNode.Children.Add(ParseUnaryOrPrimary(tokens, ref pos));
+                }
+                finally
+                {
+                    parseDepth--;
+                }
                 return unaryNode;
             }
         }

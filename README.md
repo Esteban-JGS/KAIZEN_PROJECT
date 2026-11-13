@@ -227,7 +227,7 @@ KaizenLang/
 
 ### .NET SDK
 
-- .NET SDK 9.0.x
+- .NET SDK 9.0.321 or a newer 9.0 SDK (pinned in `KaizenLang/global.json`; CI and the Vercel build install that exact version)
 
 If you do not have .NET installed:
 
@@ -434,7 +434,8 @@ These are reflected in the current codebase behavior:
 - `while`, `do-while` and `for` loops stop after 10,000 iterations with a warning.
 - Recursion depth is capped at 100 calls in the IDE and CLI tools. The web playground caps it at 40 calls, and lower for functions whose body nests loops and conditionals, because the browser's WebAssembly stack is much smaller; it reports an error instead of crashing.
 - The IDE stops a program after 5 seconds of execution (time spent answering `input()` does not count); the web playground stops it after 2,000,000 evaluation steps.
-- `input()` tokenizes by whitespace, full free-form line input is limited.
+- `input()` tokenizes by whitespace, full free-form line input is limited. Calling it when there is no input left (empty input box or cancelled dialog) is a runtime error.
+- Source code can nest parentheses, brackets, unary operators and blocks up to 50 levels, and a single statement can be at most 150 levels deep in the syntax tree (for example, a chain of about 150 `+` operators). Deeper code is reported as a syntax error so that it cannot exhaust the browser stack.
 - Functions must be declared before they are called.
 - SVG menu icons are loaded from `Resources/icons/*.svg`, which is not included in the repository, so IDE menus show text only.
 

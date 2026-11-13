@@ -40,6 +40,6 @@ public class Diagnostics
     {
         if (node == null)
             return message;
-        return $"{message} (l{node.Line}:c{node.Column})";
+        return $"{message} (línea {node.Line}, columna {node.Column})";
     }
 }
