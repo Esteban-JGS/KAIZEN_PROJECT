@@ -51,6 +51,11 @@ public partial class Parser
     {
         var left = ParseUnaryOrPrimary(tokens, ref pos);
 
+        // Si el operando ya falló, no se sigue armando la expresión: cada operador siguiente agregaría
+        // otro error con la misma causa.
+        if (left.Type == Node.ErrorType)
+            return left;
+
         while (pos < tokens.Count)
         {
             if (tokens[pos].Type == "DELIMITER" &&
@@ -66,9 +71,14 @@ public partial class Parser
             if (op == OperatorWords.ASSIGN)
                 break;
 
+            if (op is OperatorWords.ADD_ASSIGN or OperatorWords.SUB_ASSIGN or OperatorWords.MUL_ASSIGN or OperatorWords.DIV_ASSIGN)
+                return ErrorNode($"El operador '{op}' no está soportado; escribe la asignación completa (x = x {op[0]} valor).", pos);
+
             int precedence = GetPrecedence(op);
 
-            if (precedence < minPrecedence)
+            // Precedencia 0: no es un operador binario (++, --, +=...). Antes se consumía igual, y
+            // "gear x = ----...1;" daba un error por cada "--" (más de mil líneas de error).
+            if (precedence == 0 || precedence < minPrecedence)
                 break;
 
             var opToken = tokens[pos];
