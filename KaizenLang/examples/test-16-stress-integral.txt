@@ -98,8 +98,8 @@ gear depthTracer(gear level, gear limit) ying
     return depthTracer(level + 1, limit);  // Recursión con incremento
 yang
 
-// Probar con mayor profundidad (50 niveles)
-gear depthReached = depthTracer(0, 50);
+// 30 niveles: el playground web limita la recursión a 40 llamadas (la pila de WebAssembly es chica)
+gear depthReached = depthTracer(0, 30);
 output("Recursión lineal alcanzó el nivel: " + depthReached);
 
 // Función recursiva con cálculo acumulativo

@@ -84,27 +84,58 @@ public class Node
     // así que buscar "Error" como subcadena marcaba como error un output("Error") o una variable numErrores.
     public bool HasErrors()
     {
-        return Type == ErrorType || Children.Any(c => c.HasErrors());
+        return DescendantsAndSelf().Any(n => n.Type == ErrorType);
     }
 
+    // Mensajes de los nodos de error, en orden de aparición. No entra a los hijos de un nodo de error,
+    // que solo guardan su mensaje.
     public List<string> GetAllErrors()
     {
         var collected = new List<string>();
-        CollectErrors(collected);
+        foreach (var node in DescendantsAndSelf(stopAt: n => n.Type == ErrorType))
+        {
+            if (node.Type == ErrorType)
+            {
+                collected.Add(node.Children.Count > 0 && !string.IsNullOrEmpty(node.Children[0].Type)
+                    ? node.Children[0].Type
+                    : "Error de sintaxis");
+            }
+        }
         return collected;
     }
 
-    private void CollectErrors(List<string> collected)
+    // Recorrido en preorden con una pila explícita, sin recursión: una expresión larga como 1+1+1+...
+    // genera un árbol muy profundo y recorrerlo recursivamente podía agotar la pila de WebAssembly.
+    // 'stopAt' devuelve el nodo pero no recorre sus hijos.
+    public IEnumerable<Node> DescendantsAndSelf(Func<Node, bool>? stopAt = null)
     {
-        if (Type == ErrorType)
+        var pending = new Stack<Node>();
+        pending.Push(this);
+        while (pending.Count > 0)
         {
-            collected.Add(Children.Count > 0 && !string.IsNullOrEmpty(Children[0].Type)
-                ? Children[0].Type
-                : "Error de sintaxis");
-            return;
+            var node = pending.Pop();
+            yield return node;
+            if (stopAt != null && stopAt(node))
+                continue;
+            for (int i = node.Children.Count - 1; i >= 0; i--)
+                pending.Push(node.Children[i]);
         }
+    }
 
-        foreach (var child in Children)
-            child.CollectErrors(collected);
+    // Profundidad máxima del árbol (1 = solo este nodo), calculada sin recursión.
+    public int Depth()
+    {
+        int max = 0;
+        var pending = new Stack<(Node Node, int Level)>();
+        pending.Push((this, 1));
+        while (pending.Count > 0)
+        {
+            var (node, level) = pending.Pop();
+            if (level > max)
+                max = level;
+            foreach (var child in node.Children)
+                pending.Push((child, level + 1));
+        }
+        return max;
     }
 }

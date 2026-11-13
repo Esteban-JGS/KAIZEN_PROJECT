@@ -18,7 +18,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '9.0.x'
+        global-json-file: KaizenLang/global.json
     - name: Restore
       run: dotnet restore KaizenLang.sln
     # La solución incluye la app, las herramientas de tools/, los tests y el playground web.

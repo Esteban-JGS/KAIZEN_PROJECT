@@ -22,7 +22,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          global-json-file: KaizenLang/global.json
 
       # Nivel warn: el .editorconfig marca como warning lo obligatorio (p. ej. namespaces de archivo); el resto son sugerencias.
       # `dotnet format` viene incluido en el SDK desde .NET 6; ya no hace falta instalar la herramienta global.

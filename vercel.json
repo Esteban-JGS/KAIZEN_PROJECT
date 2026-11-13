@@ -2,5 +2,16 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "buildCommand": "bash KaizenLang/src/KaizenLang.Web/vercel-build.sh",
-  "outputDirectory": "dist/wwwroot"
+  "outputDirectory": "dist/wwwroot",
+  "headers": [
+    {
+      "source": "/_framework/(.+\\.[a-z0-9]{10}\\.(?:wasm|js|dat|pdb))",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    }
+  ]
 }

@@ -41,15 +41,62 @@ public partial class Parser
 
     private static Node? FirstError(Node node)
     {
-        if (node.Type == Node.ErrorType)
-            return node;
-        foreach (var child in node.Children)
+        return node.DescendantsAndSelf().FirstOrDefault(n => n.Type == Node.ErrorType);
+    }
+
+    // Tope de anidamiento del parser (paréntesis, corchetes, operadores unarios y bloques). El parser
+    // es recursivo: en el playground web, unos 150 paréntesis anidados agotaban la pila de WebAssembly.
+    public const int MaxNestingDepth = 50;
+    private int parseDepth;
+
+    // Entra a un nivel de anidamiento. Si se pasa del tope devuelve un error, y antes salta el resto de la
+    // construcción anidada para que los niveles exteriores encuentren su cierre y no se repita el error.
+    private Node? EnterNesting(List<Token> tokens, ref int pos)
+    {
+        if (parseDepth < MaxNestingDepth)
         {
-            var found = FirstError(child);
-            if (found != null)
-                return found;
+            parseDepth++;
+            return null;
         }
-        return null;
+
+        // Un solo mensaje por programa: si la condición de un if ya superó el tope, su bloque también lo
+        // superará; el segundo nodo no es un error para no repetir el mensaje (la compilación ya falló).
+        var result = nestingErrorReported
+            ? new Node("Empty")
+            : ErrorNode($"Código demasiado anidado: se admiten hasta {MaxNestingDepth} niveles de paréntesis, corchetes, operadores unarios o bloques.", pos);
+        nestingErrorReported = true;
+        SkipNestedRemainder(tokens, ref pos);
+        return result;
+    }
+
+    private bool nestingErrorReported;
+
+    // Avanza hasta el cierre que corresponde al nivel actual (sin consumirlo) o hasta un ';' de ese nivel.
+    private static void SkipNestedRemainder(List<Token> tokens, ref int pos)
+    {
+        int depth = 0;
+        while (pos < tokens.Count)
+        {
+            var token = tokens[pos];
+            if (token.Type == "DELIMITER")
+            {
+                if (token.Value is DelimiterWords.PAREN_OPEN or DelimiterWords.BRACKET_OPEN or DelimiterWords.BLOCK_START)
+                {
+                    depth++;
+                }
+                else if (token.Value is DelimiterWords.PAREN_CLOSE or DelimiterWords.BRACKET_CLOSE or DelimiterWords.BLOCK_END)
+                {
+                    if (depth == 0)
+                        return;
+                    depth--;
+                }
+                else if (token.Value == DelimiterWords.SEMICOLON && depth == 0)
+                {
+                    return;
+                }
+            }
+            pos++;
+        }
     }
 
     private static Node CreateError(string mensaje, int line, int column)

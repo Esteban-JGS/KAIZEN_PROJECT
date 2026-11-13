@@ -126,8 +126,8 @@ void g() ying
     f();
 yang
 g();");
-        Assert.Contains(errors, e => e.Contains("'secreto' no declarada") && e.Contains("l3:"));
-        Assert.DoesNotContain(errors, e => e.Contains("l6:"));
+        Assert.Contains(errors, e => e.Contains("'secreto' no declarada") && e.Contains("(línea 3,"));
+        Assert.DoesNotContain(errors, e => e.Contains("(línea 6,"));
     }
 
     [Fact]
@@ -166,6 +166,48 @@ output(f(1000));");
         var output = new Interpreter { MaxCallDepth = 5000, MaxNestingDepth = 200 }.Execute(result.AST!);
         Assert.Single(output);
         Assert.Contains("profundidad máxima de recursión que admite este entorno", output[0]);
+    }
+
+    [Fact]
+    public void DeeplyNestedParentheses_ReportOneSyntaxError()
+    {
+        var code = "gear x = " + new string('(', 150) + "1" + new string(')', 150) + ";";
+        var errors = CompileErrors(code);
+        Assert.Single(errors);
+        Assert.Contains("demasiado anidado", errors[0]);
+    }
+
+    [Fact]
+    public void DeeplyNestedBlocks_ReportOneSyntaxError()
+    {
+        var code = "shin t = true;\n" + string.Concat(Enumerable.Repeat("if (t) ying\n", 120)) + "output(1);\n" + string.Concat(Enumerable.Repeat("yang\n", 120));
+        var errors = CompileErrors(code);
+        Assert.Single(errors);
+        Assert.Contains("demasiado anidado", errors[0]);
+    }
+
+    [Fact]
+    public void VeryLongExpressionChain_IsRejectedBeforeSemanticAnalysis()
+    {
+        var code = "gear x = 1" + string.Concat(Enumerable.Repeat(" + 1", 1000)) + ";";
+        var errors = CompileErrors(code);
+        Assert.Contains(errors, e => e.Contains("Expresión demasiado larga o anidada"));
+    }
+
+    [Fact]
+    public void Input_WithoutData_IsARuntimeError()
+    {
+        var result = new CompilationService().CompileCode("grimoire n = input();\noutput(n);");
+        Assert.True(result.IsSuccessful);
+        var output = new Interpreter(_ => null).Execute(result.AST!);
+        Assert.Equal(new[] { "Error de ejecución: input() no recibió datos: la entrada está vacía o se canceló." }, output);
+    }
+
+    [Fact]
+    public void SemanticAndSyntaxErrors_UseTheSamePositionFormat()
+    {
+        var errors = CompileErrors("output(noExiste);");
+        Assert.Contains(errors, e => e.EndsWith("(línea 1, columna 8)"));
     }
 
     [Fact]

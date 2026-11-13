@@ -85,6 +85,14 @@ public partial class Interpreter
         return tokens;
     }
 
+    // input() sin datos (cuadro de entrada vacío o diálogo cancelado) es un error de ejecución claro;
+    // antes devolvía null y el programa seguía imprimiendo "null".
+    private string ReadInputOrFail(string? prompt)
+    {
+        return ReadNextInputToken(prompt)
+            ?? throw new Exception("input() no recibió datos: la entrada está vacía o se canceló.");
+    }
+
     // Ensure inputBuffer has tokens: if empty, ask inputProvider for a line.
     // If no inputProvider is supplied, attempt a Console.ReadLine with a short timeout
     // so running snippets in non-interactive contexts doesn't hang indefinitely.
@@ -333,7 +341,9 @@ public partial class Interpreter
             throw new Exception($"Se alcanzó el límite de {MaxExecutionSteps} pasos de ejecución (¿bucle muy largo o infinito?)");
 
         if (MaxNestingDepth > 0 && nestingDepth >= MaxNestingDepth)
-            throw new Exception($"Se excedió la profundidad máxima de recursión que admite este entorno ({currentCallDepth} llamadas anidadas).");
+            throw new Exception(currentCallDepth > 0
+                ? $"Se excedió la profundidad máxima de recursión que admite este entorno ({currentCallDepth} llamadas anidadas)."
+                : "Se excedió la profundidad máxima de anidamiento que admite este entorno.");
 
         nestingDepth++;
         try

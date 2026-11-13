@@ -143,7 +143,7 @@ public class CompilationService
             {
                 foreach (var invalidToken in invalidTokens)
                 {
-                    AppendError($"error léxico: {invalidToken.Value} en la línea {invalidToken.Line}, columna {invalidToken.Column}.");
+                    AppendError($"error léxico: {invalidToken.Value} (línea {invalidToken.Line}, columna {invalidToken.Column})");
                 }
 
                 result.LexicalErrors = invalidTokens;

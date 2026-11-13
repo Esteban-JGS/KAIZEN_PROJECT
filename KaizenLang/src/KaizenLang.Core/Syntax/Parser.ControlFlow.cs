@@ -227,17 +227,34 @@ public partial class Parser
     {
         var blockNode = new Node("Block");
 
-        while (pos < tokens.Count && !IsDelimiter(tokens, pos, DelimiterWords.BLOCK_END))
+        // Con demasiados bloques anidados, EnterNesting ya saltó el contenido; solo falta su 'yang'.
+        var tooDeep = EnterNesting(tokens, ref pos);
+        if (tooDeep != null)
         {
-            blockNode.Children.Add(ParseStatementAdvancing(tokens, ref pos, "Token inesperado '{0}' dentro de un bloque."));
+            blockNode.Children.Add(tooDeep);
+            if (IsDelimiter(tokens, pos, DelimiterWords.BLOCK_END))
+                pos++;
+            return blockNode;
         }
 
-        // El bucle solo termina en 'yang' o al final del archivo; antes un bloque sin cerrar pasaba sin error.
-        if (IsDelimiter(tokens, pos, DelimiterWords.BLOCK_END))
-            pos++;
-        else
-            blockNode.Children.Add(ErrorNode($"Bloque no cerrado. Se esperaba '{DelimiterWords.BLOCK_END}'.", pos));
+        try
+        {
+            while (pos < tokens.Count && !IsDelimiter(tokens, pos, DelimiterWords.BLOCK_END))
+            {
+                blockNode.Children.Add(ParseStatementAdvancing(tokens, ref pos, "Token inesperado '{0}' dentro de un bloque."));
+            }
 
-        return blockNode;
+            // El bucle solo termina en 'yang' o al final del archivo; antes un bloque sin cerrar pasaba sin error.
+            if (IsDelimiter(tokens, pos, DelimiterWords.BLOCK_END))
+                pos++;
+            else
+                blockNode.Children.Add(ErrorNode($"Bloque no cerrado. Se esperaba '{DelimiterWords.BLOCK_END}'.", pos));
+
+            return blockNode;
+        }
+        finally
+        {
+            parseDepth--;
+        }
     }
 }

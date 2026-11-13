@@ -148,6 +148,7 @@ select {
     padding: 8px 10px;
     font: inherit;
     max-width: 100%;
+    min-height: 44px;
 }
 
 .actions {
@@ -162,6 +163,7 @@ select {
     font: inherit;
     font-weight: 600;
     cursor: pointer;
+    min-height: 44px; /* tamaño táctil recomendado */
 }
 
 .btn:disabled {
