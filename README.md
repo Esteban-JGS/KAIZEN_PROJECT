@@ -432,7 +432,7 @@ These are reflected in the current codebase behavior:
 
 - The desktop IDE is Windows-only (`net9.0-windows`); the web playground runs anywhere.
 - `while`, `do-while` and `for` loops stop after 10,000 iterations with a warning.
-- Recursion depth is capped by default (100).
+- Recursion depth is capped at 100 calls in the IDE and CLI tools. The web playground caps it at 40 calls, and lower for functions whose body nests loops and conditionals, because the browser's WebAssembly stack is much smaller; it reports an error instead of crashing.
 - The IDE stops a program after 5 seconds of execution (time spent answering `input()` does not count); the web playground stops it after 2,000,000 evaluation steps.
 - `input()` tokenizes by whitespace, full free-form line input is limited.
 - Functions must be declared before they are called.

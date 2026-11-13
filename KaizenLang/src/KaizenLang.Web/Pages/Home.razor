@@ -45,7 +45,7 @@
                 <h2>Salida</h2>
                 @if (result != null)
                 {
-                    <span class="status @(result.Success ? "ok" : "fail")">
+                    <span class="status @(!result.Success ? "fail" : result.HasWarnings ? "warn" : "ok")">
                         @StatusText(result) · @result.Elapsed.TotalMilliseconds.ToString("0") ms
                     </span>
                 }
@@ -161,6 +161,8 @@ yang
             return r.Diagnostics.Count == 1 ? "1 error" : $"{r.Diagnostics.Count} errores";
         if (!r.Success)
             return "Error de ejecución";
+        if (r.HasWarnings)
+            return "Ejecución con advertencias";
         return lastWasExecution ? "Ejecución exitosa" : "Compilación exitosa";
     }
 }

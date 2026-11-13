@@ -301,6 +301,10 @@ select {
     color: var(--accent);
 }
 
+.status.warn {
+    color: var(--warning);
+}
+
 .status.fail {
     color: var(--error);
 }
