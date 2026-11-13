@@ -187,6 +187,21 @@ output(f(1000));");
     }
 
     [Fact]
+    public void NonBinaryOperatorsInsideAnExpression_ReportOneError()
+    {
+        // Cada "--" se tomaba como operador binario y generaba un error propio: más de mil líneas.
+        var errors = CompileErrors("gear x = " + new string('-', 2000) + "1;");
+        Assert.Single(errors);
+    }
+
+    [Fact]
+    public void CompoundAssignment_HasAClearMessage()
+    {
+        var errors = CompileErrors("gear x = 1;\nx += 2;");
+        Assert.Contains(errors, e => e.Contains("El operador '+=' no está soportado"));
+    }
+
+    [Fact]
     public void VeryLongExpressionChain_IsRejectedBeforeSemanticAnalysis()
     {
         var code = "gear x = 1" + string.Concat(Enumerable.Repeat(" + 1", 1000)) + ";";
