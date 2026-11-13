@@ -71,14 +71,22 @@
                     }
                     @foreach (var line in result.Output.Take(MaxOutputLinesShown))
                     {
-                        <div class="line @(line.StartsWith("Error de ejecución") ? "diagnostic" : line.StartsWith("Advertencia") ? "warning" : null)">@(line.Length == 0 ? " " : line)</div>
+                        <div class="line @LineClass(line)">@(line.Length == 0 ? " " : line)</div>
                     }
                     @if (result.Output.Count > MaxOutputLinesShown)
                     {
-                        <div class="line muted">… y @(result.Output.Count - MaxOutputLinesShown) líneas más.</div>
-                        @if (result.Output[^1].StartsWith("Error de ejecución"))
+                        var hiddenNotices = result.Output.Skip(MaxOutputLinesShown).Where(line => LineClass(line) != null).ToList();
+                        <div class="line muted">… y @(result.Output.Count - MaxOutputLinesShown) líneas más.@(hiddenNotices.Count > 0 ? " Entre ellas, estas advertencias y errores:" : "")</div>
+                        @* Si son demasiados se muestran los primeros y el último, que suele ser el error que cortó la ejecución. *@
+                        bool tooManyNotices = hiddenNotices.Count > MaxHiddenNoticesShown;
+                        @foreach (var notice in hiddenNotices.Take(tooManyNotices ? MaxHiddenNoticesShown - 1 : MaxHiddenNoticesShown))
                         {
-                            <div class="line diagnostic">@result.Output[^1]</div>
+                            <div class="line @LineClass(notice)">@notice</div>
+                        }
+                        @if (tooManyNotices)
+                        {
+                            <div class="line muted">… y @(hiddenNotices.Count - MaxHiddenNoticesShown) avisos más.</div>
+                            <div class="line @LineClass(hiddenNotices[^1])">@hiddenNotices[^1]</div>
                         }
                     }
                     @if (result.Success && result.Diagnostics.Count == 0 && result.Output.Count == 0)
@@ -122,6 +130,14 @@ yang
     // y la página crecía a decenas de miles de píxeles de alto.
     private const int MaxDiagnosticsShown = 50;
     private const int MaxOutputLinesShown = 2000;
+    // Las advertencias y errores que caen debajo del corte se muestran igual: explican el estado
+    // ("Ejecución con advertencias", "Error de ejecución"). Un bucle anidado puede generar miles.
+    private const int MaxHiddenNoticesShown = 10;
+
+    private static string? LineClass(string line) =>
+        line.StartsWith("Error de ejecución", StringComparison.Ordinal) ? "diagnostic"
+        : line.StartsWith("Advertencia", StringComparison.Ordinal) ? "warning"
+        : null;
 
     private string code = DefaultProgram;
     private string input = string.Empty;
