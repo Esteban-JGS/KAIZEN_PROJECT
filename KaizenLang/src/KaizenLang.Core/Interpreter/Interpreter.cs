@@ -321,11 +321,33 @@ public partial class Interpreter
     public long MaxExecutionSteps { get; set; }
     private long executedSteps;
 
+    // Límite opcional de niveles de evaluación anidados (0 = sin límite). Cada llamada de KaizenLang usa
+    // varios niveles de ExecuteNode; en WebAssembly la pila es chica y agotarla tumba la aplicación sin
+    // mensaje. Este tope corta antes, sin importar cuánto "pese" cada función, y lo reporta como error.
+    public int MaxNestingDepth { get; set; }
+    private int nestingDepth;
+
     private object? ExecuteNode(Node node)
     {
         if (MaxExecutionSteps > 0 && ++executedSteps > MaxExecutionSteps)
             throw new Exception($"Se alcanzó el límite de {MaxExecutionSteps} pasos de ejecución (¿bucle muy largo o infinito?)");
 
+        if (MaxNestingDepth > 0 && nestingDepth >= MaxNestingDepth)
+            throw new Exception($"Se excedió la profundidad máxima de recursión que admite este entorno ({currentCallDepth} llamadas anidadas).");
+
+        nestingDepth++;
+        try
+        {
+            return ExecuteNodeCore(node);
+        }
+        finally
+        {
+            nestingDepth--;
+        }
+    }
+
+    private object? ExecuteNodeCore(Node node)
+    {
         switch (node.Type)
         {
             case "Program":

@@ -151,6 +151,24 @@ yang");
     }
 
     [Fact]
+    public void NestingLimit_StopsDeepRecursionWithAMessage()
+    {
+        // El playground web usa este tope para no agotar la pila de WebAssembly, que es mucho más chica.
+        var result = new CompilationService().CompileCode(@"
+gear f(gear n) ying
+    if (n <= 0) ying
+        return 0;
+    yang
+    return f(n - 1) + 1;
+yang
+output(f(1000));");
+        Assert.True(result.IsSuccessful);
+        var output = new Interpreter { MaxCallDepth = 5000, MaxNestingDepth = 200 }.Execute(result.AST!);
+        Assert.Single(output);
+        Assert.Contains("profundidad máxima de recursión que admite este entorno", output[0]);
+    }
+
+    [Fact]
     public void StringsAndIdentifiersContainingError_AreNotSyntaxErrors()
     {
         var output = Run(@"
